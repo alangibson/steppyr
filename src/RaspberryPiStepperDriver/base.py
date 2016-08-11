@@ -1,4 +1,4 @@
-import time
+import asyncio, time
 import RPi.GPIO as GPIO
 
 # Motor rotation direction
@@ -21,11 +21,12 @@ class StepperDriver:
   def __init__(self, motor_steps, dir_pin, step_pin,
                enable_pin=None, pin_mode=GPIO.BOARD, microsteps=1, rpm=60):
     """
-    Parameters:
+    Arguments:
         motor_steps: number of steps per revolution
         dir_pin: pin number of DIR pin
         step_pin: pin number of STEP pin
         enable_pin: pin number of ENABLE pin
+        us_to_step: Number of microseconds to wait for motor to take a step.
     """
     self.motor_steps = motor_steps
     self.dir_pin = dir_pin
@@ -33,6 +34,9 @@ class StepperDriver:
     self.enable_pin = enable_pin
     self.microsteps = microsteps
     self.rpm = rpm
+    self._direction = CLOCKWISE
+    self._aborted = False
+    self._is_moving = False
     self._calc_step_pulse_us()
 
     GPIO.setmode(pin_mode)
@@ -49,41 +53,55 @@ class StepperDriver:
       print('base.StepperDriver calculated step pulse', self.step_pulse_us,
             'motor_steps', self.motor_steps, 'microsteps', self.microsteps,
             'rpm', self.rpm)
-    # TODO else error?
+      # We currently try to do a 50% duty cycle so it's easy to see.
+      # Other option is step_high_min, pulse_duration-step_high_min.
+      self.pulse_duration_us = self.step_pulse_us / 2
 
-  def move(self, steps):
+  async def move(self, steps):
     """
     Move the motor a given number of steps.
-    positive to move forward, negative to reverse
+
+    Arguments:
+        steps: Number of steps to move. positive to move forward, negative to reverse.
     """
     if steps == 0:
       return
     direction = 1 if steps > 0 else -1
     self.set_direction(direction)
 
-    # We currently try to do a 50% duty cycle so it's easy to see.
-    # Other option is step_high_min, pulse_duration-step_high_min.
     steps_to_move = steps * direction # so steps is always positive
-    pulse_duration_us = self.step_pulse_us / 2
 
-    print('base.StepperDriver direction', direction, 'steps', steps,
-          'step_pulse_us', self.step_pulse_us, 'pulse_duration_us', pulse_duration_us)
+    # print('base.StepperDriver direction', direction, 'steps', steps,
+    #       'step_pulse_us', self.step_pulse_us, 'pulse_duration_us', self.pulse_duration_us)
 
+    # Move the motor
+    self._is_moving = True
     while steps_to_move > 0:
-      #print('steps', steps, 'steps_to_move', steps_to_move)
+      if self._aborted == True:
+        self._aborted = False
+        break
+      ts = time.time()
       GPIO.output(self.step_pin, GPIO.HIGH)
-      sleep_microseconds(pulse_duration_us)
+      sleep_microseconds(self.pulse_duration_us)
       GPIO.output(self.step_pin, GPIO.LOW)
-      sleep_microseconds(pulse_duration_us)
+      sleep_microseconds(self.pulse_duration_us)
       steps_to_move -= 1
+      await asyncio.sleep(0) # Just here so we yield to event loop
+    self._is_moving = False
 
-  def rotate(self, degrees):
+  async def rotate(self, degrees):
     """
     Rotate motor a given number of degrees. Set the motor direction with
     set_direction.
     """
     steps = degrees * self.motor_steps * self.microsteps / 360
-    self.move(steps)
+    await self.move(steps)
+
+  def abort(self):
+    """ Abort an asyncronous move """
+    if self._is_moving:
+      print('Aborting move')
+      self._aborted = True
 
   def enable(self):
     if self.enable_pin:
@@ -118,5 +136,10 @@ class StepperDriver:
 
     Direction: HIGH = forward, LOW = reverse
     """
+    self._direction = direction
     logic_value = GPIO.LOW if direction < 0 else GPIO.HIGH
     GPIO.output(self.dir_pin, logic_value)
+
+  @property
+  def direction(self):
+    return self._direction
