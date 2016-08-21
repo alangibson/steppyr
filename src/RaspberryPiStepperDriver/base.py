@@ -1,5 +1,8 @@
-import asyncio, time
+import asyncio, logging, time
 import RPi.GPIO as GPIO
+
+logging.basicConfig(level=logging.DEBUG)
+log = logging.getLogger(__name__)
 
 # Motor rotation direction
 CLOCKWISE = 1
@@ -10,7 +13,7 @@ ENABLED = 1
 DISABLED = -1
 
 def sleep_microseconds(us_to_sleep):
-  # print('sleeping for seconds', us_to_sleep / float(1000000))
+  # log.debug('sleeping for seconds', us_to_sleep / float(1000000))
   time.sleep(us_to_sleep / float(1000000))
 
 class StepperDriver:
@@ -50,9 +53,8 @@ class StepperDriver:
     """
     if self.motor_steps and self.microsteps and self.rpm:
       self.step_pulse_us = 60 * 1000000 / self.motor_steps / self.microsteps / self.rpm
-      print('base.StepperDriver calculated step pulse', self.step_pulse_us,
-            'motor_steps', self.motor_steps, 'microsteps', self.microsteps,
-            'rpm', self.rpm)
+      log.debug('base.StepperDriver calculated step pulse %s motor_steps %s microsteps %s rpm %s', 
+        self.step_pulse_us, self.motor_steps, self.microsteps, self.rpm)
       # We currently try to do a 50% duty cycle so it's easy to see.
       # Other option is step_high_min, pulse_duration-step_high_min.
       self.pulse_duration_us = self.step_pulse_us / 2
@@ -71,7 +73,7 @@ class StepperDriver:
 
     steps_to_move = steps * direction # so steps is always positive
 
-    # print('base.StepperDriver direction', direction, 'steps', steps,
+    # log.debug('base.StepperDriver direction', direction, 'steps', steps,
     #       'step_pulse_us', self.step_pulse_us, 'pulse_duration_us', self.pulse_duration_us)
 
     # Move the motor
@@ -100,7 +102,7 @@ class StepperDriver:
   def abort(self):
     """ Abort an asyncronous move """
     if self._is_moving:
-      print('Aborting move')
+      log.debug('Aborting move')
       self._aborted = True
 
   def enable(self):
@@ -143,3 +145,7 @@ class StepperDriver:
   @property
   def direction(self):
     return self._direction
+
+  @property
+  def is_moving(self):
+      return self._is_moving
