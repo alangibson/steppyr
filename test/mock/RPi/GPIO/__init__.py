@@ -16,17 +16,22 @@ SPI          = 41
 I2C          = 42
 PWM          = 43
 
+PUD_UP       = 1
+
 def setmode(mode):
   if DEBUG:
     print(time.time(), 'setmode', mode)
 
-def setup(pin, level, initial=HIGH):
+def setup(pin, level, initial=HIGH, pull_up_down=PUD_UP):
   if DEBUG:
     print(time.time(), 'setup', pin, level, initial)
 
 def output(pin, level):
   if DEBUG:
     print(time.time(), 'output', pin, level)
+
+def input(pin):
+    return 1
 
 def cleanup():
   if DEBUG:
