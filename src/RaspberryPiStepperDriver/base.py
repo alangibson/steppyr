@@ -42,6 +42,11 @@ class StepperDriver:
     self._is_moving = False
     self._calc_step_pulse_us()
 
+    self._step_counter = 0
+    # Counter for the number of steps still to move
+    # TODO make this an atomic int
+    self._steps_to_move = 0
+
     GPIO.setmode(pin_mode)
     GPIO.setup(dir_pin, GPIO.OUT, initial=GPIO.HIGH)
     GPIO.setup(step_pin, GPIO.OUT, initial=GPIO.LOW)
@@ -71,39 +76,53 @@ class StepperDriver:
         steps: Number of steps to move. positive to move forward, negative to reverse.
     """
     # Dont enter this method if we are already moving.
-    if self._is_moving == True:
-      log.debug('Already moving. Call abort() first if you want to move immediately')
-      return 0
+    # if self._is_moving == True:
+      # log.debug('Already moving. Call abort() first if you want to move immediately')
+    #  return 0
     self._aborted = False
-
-    log.debug('Should move %s steps', steps)
     if steps == 0:
-      return 0
+        return
 
-    # Figure out direction and set accordingly
-    direction = 1 if steps > 0 else -1
-    self.set_direction(direction)
+    log.debug('Should move %s steps. Current step counter: %s, Steps to move %s',
+      steps, self._steps_to_move, self._steps_to_move)
+    self._steps_to_move += steps
 
-    steps_to_move = steps * direction # so steps is always positive
+    # TODO only start stepping if so other coro is not doing it
+    if self._is_moving == True:
+      # log.debug('Already moving. Call abort() first if you want to move immediately')
+      return
 
     # Move the motor
     self._is_moving = True
-    while steps_to_move > 0:
+    while abs(self._steps_to_move) > 0:
       await asyncio.sleep(0)
+
       if self._aborted:
-        log.debug('Aborted move with %s steps still to move', steps_to_move)
+        log.debug('Aborted move with %s steps still to move', self._steps_to_move)
         break
+
+      # TODO base direction on global steps to move?
+      # Figure out direction and set accordingly
+      direction = 1 if self._steps_to_move > 0 else -1
+      self.set_direction(direction)
+
+      # Move the motor one step
       ts = time.time()
       GPIO.output(self.step_pin, GPIO.HIGH)
       sleep_microseconds(self.pulse_duration_us)
       GPIO.output(self.step_pin, GPIO.LOW)
       sleep_microseconds(self.pulse_duration_us)
-      steps_to_move -= 1
+
+      # Increment the step counter and step to move counter
+      self._step_counter += direction
+      if self._steps_to_move > 0:
+          self._steps_to_move -= 1
+      elif self._steps_to_move < 0:
+          self._steps_to_move += 1
     self._is_moving = False
 
-    actual_steps = steps - ( steps_to_move * direction)
-    log.debug('Actual steps moved %s', actual_steps)
-    return actual_steps
+    log.debug('Finished moving. Current step counter: %s', self._step_counter)
+    return 0
 
   async def rotate(self, degrees):
     """
@@ -118,6 +137,7 @@ class StepperDriver:
     #if self._is_moving:
     log.debug('Aborting move')
     self._aborted = True
+    self._steps_to_move = 0
 
   def enable(self):
     if self.enable_pin:
@@ -155,6 +175,17 @@ class StepperDriver:
     self._direction = direction
     logic_value = GPIO.LOW if direction < 0 else GPIO.HIGH
     GPIO.output(self.dir_pin, logic_value)
+
+  @property
+  def step_counter(self):
+    return self._step_counter
+
+  @property
+  def steps_to_move(self):
+    return self._steps_to_move
+
+  def reset_step_counter(self, step_counter = 0):
+    self._step_counter = step_counter
 
   @property
   def direction(self):
