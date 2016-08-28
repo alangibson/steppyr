@@ -3,8 +3,10 @@ Based on AccelStepper (http://www.airspayce.com/mikem/arduino/AccelStepper).
 Ported to Python by Alan Gibson.
 """
 from datetime import datetime
-import asyncio, math, time
+import asyncio, logging, math, time
 import RPi.GPIO as GPIO
+
+log = logging.getLogger(__name__)
 
 DIRECTION_CCW = 0   # Clockwise
 DIRECTION_CW  = 1   # Counter-Clockwise
@@ -44,14 +46,23 @@ class AccelStepper:
     self._cn = 0.0
     self._cmin = 1.0
     # Pins
-    self.dir_pin = dir_pin
-    self.step_pin = step_pin
-    self.enable_pin = enable_pin
-    self.pin_mode = pin_mode
+    self._dir_pin = dir_pin
+    self._step_pin = step_pin
+    self._enable_pin = enable_pin
+    self._pin_mode = pin_mode
 
   @property
   def currentPosition(self):
     return self._current_steps
+
+  # HACK backwards compatability
+  @property
+  def step_counter(self):
+    return self._current_steps
+
+  @property
+  def direction(self):
+    return self._direction
 
   @property
   def pulse_width(self):
@@ -60,24 +71,6 @@ class AccelStepper:
   @pulse_width.setter
   def pulse_width(self, pulse_width_us):
     self._pulse_width_us = pulse_width_us
-
-  @property
-  def max_speed(self):
-    return self._maxSpeed
-
-  @max_speed.setter
-  def max_speed(self, speed):
-    """
-    Arguments:
-      speed (float)
-    """
-    if self._maxSpeed != speed:
-      self._maxSpeed = speed
-      self._cmin = 1000000.0 / speed
-      # Recompute _n from current speed and adjust speed if accelerating or cruising
-      if (self._n > 0):
-        self._n = ((self._speed * self._speed) / (2.0 * self._acceleration)) # Equation 16
-        computeNewSpeed()
 
   @property
   def acceleration(self):
@@ -97,7 +90,20 @@ class AccelStepper:
         # New c0 per Equation 7, with correction per Equation 15
         self._c0 = 0.676 * math.sqrt(2.0 / acceleration) * 1000000.0 # Equation 15
         self._acceleration = acceleration
-        self.computeNewSpeed()
+        self.compute_new_speed()
+
+  @property
+  def distance_to_go(self):
+    return self._target_steps - self._current_steps
+
+  # HACK
+  @property
+  def steps_to_move(self):
+    return self._target_steps - self._current_steps
+
+  @property
+  def is_moving(self):
+    return self._speed != 0.0 or self.distance_to_go != 0
 
   def setSpeed(self, speed):
       """
@@ -114,11 +120,25 @@ class AccelStepper:
       	self._direction = DIRECTION_CW if (speed > 0.0) else DIRECTION_CCW
       self._speed = speed
 
-  def distanceToGo(self):
-      return self._target_steps - self._current_steps
+  def set_max_speed(self, speed):
+    """
+    Arguments:
+      speed (float): Steps per second
+    """
+    if self._maxSpeed != speed:
+      self._maxSpeed = speed
+      self._cmin = 1000000.0 / speed
+      # Recompute _n from current speed and adjust speed if accelerating or cruising
+      if (self._n > 0):
+        self._n = ((self._speed * self._speed) / (2.0 * self._acceleration)) # Equation 16
+        self.compute_new_speed()
 
-  def computeNewSpeed(self):
-      distanceTo = self.distanceToGo()     # +ve is clockwise from curent location
+  def set_max_speed_from_motor(self, motor_steps_per_rev, motor_rpm):
+    steps_per_sec = (motor_steps_per_rev * motor_rpm) / 60
+    self.set_max_speed(steps_per_sec)
+
+  def compute_new_speed(self):
+      distanceTo = self.distance_to_go     # +ve is clockwise from curent location
       stepsToStop = int(((self._speed * self._speed) / (2.0 * self._acceleration))) # Equation 16
 
       if distanceTo == 0 and stepsToStop <= 1:
@@ -171,18 +191,18 @@ class AccelStepper:
       if self._direction == DIRECTION_CCW:
         self._speed = -self._speed
 
-      print('Computed new speed. _current_steps=%s, _target_steps=%s, distanceToGo=%s, _n=%s, _speed=%s' %
-      ( self._current_steps, self._target_steps, self.distanceToGo(), self._n, self._speed ))
+      log.debug('Computed new speed. _current_steps=%s, _target_steps=%s, distance_to_go=%s, _n=%s, _speed=%s',
+        self._current_steps, self._target_steps, self.distance_to_go, self._n, self._speed)
 
-  def moveTo(self, absolute_steps):
+  def move_to(self, absolute_steps):
     if self._target_steps != absolute_steps:
       self._target_steps = absolute_steps
-      self.computeNewSpeed()
+      self.compute_new_speed()
 
   def move(self, relative_steps):
-    self.moveTo(self._current_steps + relative_steps)
+    self.move_to(self._current_steps + relative_steps)
 
-  async def runForever(self):
+  async def run_forever(self):
     while True:
       await self.run()
       # Without this await, we never yield back to the event loop
@@ -193,14 +213,14 @@ class AccelStepper:
   # If the motor is in the desired position, the cost is very small
   # returns true if the motor is still running to the target position.
   async def run(self):
-    if await self.runSpeed():
-      self.computeNewSpeed()
-    return self._speed != 0.0 or self.distanceToGo() != 0
+    if await self.run_speed():
+      self.compute_new_speed()
+    return self.is_moving
 
   # Implements steps according to the current step interval
   # You must call this at least once per step
   # returns true if a step occurred
-  async def runSpeed(self):
+  async def run_speed(self):
     # Dont do anything unless we actually have a step interval
     if not self._step_interval_us:
       return False
@@ -225,10 +245,54 @@ class AccelStepper:
       # No step necessary at this time
       return False
 
+  async def wait_on_move(self):
+    """
+    'blocks' until is_moving == False.
+    Only use this method if you know there are no other calls to move() happening,
+    or this method may never return. For example: during calibration at startup.
+    """
+    while self.is_moving:
+      await asyncio.sleep(0)
+
   def step(self, step):
-    # TODO setOutputPins(_direction ? 0b10 : 0b00); // Set direction first else get rogue pulses
-    GPIO.output(self.step_pin, GPIO.HIGH)
+    # Set direction first else get rogue pulses
+    GPIO.output(self._dir_pin, GPIO.LOW if self._direction == DIRECTION_CCW else GPIO.HIGH)
+    GPIO.output(self._step_pin, GPIO.HIGH)
     # Caution 200ns setup time
     # Delay the minimum allowed pulse width
     sleep_microseconds(self._pulse_width_us)
-    GPIO.output(self.step_pin, GPIO.LOW)
+    GPIO.output(self._step_pin, GPIO.LOW)
+
+  def set_current_position(self, position):
+    """
+    Useful during initialisations or after initial positioning
+    Sets speed to 0
+    """
+    self._targetPos = self._currentPos = position
+    self._n = 0
+    self._stepInterval = 0
+    self._speed = 0.0
+
+  def abort(self):
+    self.set_current_position(self._currentPos)
+
+  def reset_step_counter(self):
+    self.set_current_position(0)
+
+  def enable(self):
+    if self._enable_pin:
+      GPIO.setup(self._enable_pin, GPIO.OUT, initial=GPIO.LOW)
+
+  def disable(self):
+    if self._enable_pin:
+      GPIO.setup(self._enable_pin, GPIO.OUT, initial=GPIO.HIGH)
+
+  def start(self):
+    GPIO.setmode(self._pin_mode)
+    GPIO.setup(self._dir_pin, GPIO.OUT, initial=GPIO.HIGH)
+    GPIO.setup(self._step_pin, GPIO.OUT, initial=GPIO.LOW)
+    self.enable()
+    self._run_forever_future = asyncio.ensure_future(self.run_forever())
+
+  def stop(self):
+    self._run_forever_future.cancel()
