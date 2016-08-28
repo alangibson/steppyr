@@ -268,13 +268,13 @@ class AccelStepper:
     Useful during initialisations or after initial positioning
     Sets speed to 0
     """
-    self._targetPos = self._currentPos = position
+    self._target_steps = self._current_steps = position
     self._n = 0
     self._stepInterval = 0
     self._speed = 0.0
 
   def abort(self):
-    self.set_current_position(self._currentPos)
+    self.set_current_position(self._current_steps)
 
   def reset_step_counter(self):
     self.set_current_position(0)
