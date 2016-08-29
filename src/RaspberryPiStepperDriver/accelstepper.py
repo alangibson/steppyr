@@ -19,7 +19,7 @@ def sleep_microseconds(us_to_sleep):
 
 class AccelStepper:
 
-  def __init__(self, dir_pin, step_pin, enable_pin=None, pin_mode=GPIO.BOARD):
+  def __init__(self, dir_pin, step_pin, enable_pin=None, pin_mode=GPIO.BCM):
     # Time that this objec was instantiated. Used for computing micros()
     self._start_time = datetime.now()
     # Current stepper position in steps. Same as step_counter
