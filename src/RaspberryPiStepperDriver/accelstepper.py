@@ -191,8 +191,8 @@ class AccelStepper:
       if self._direction == DIRECTION_CCW:
         self._speed = -self._speed
 
-      log.debug('Computed new speed. _current_steps=%s, _target_steps=%s, distance_to_go=%s, _n=%s, _speed=%s',
-        self._current_steps, self._target_steps, self.distance_to_go, self._n, self._speed)
+      log.debug('Computed new speed. _direction=%s, _current_steps=%s, _target_steps=%s, distance_to_go=%s, _n=%s, _speed=%s, _step_interval_us=%s',
+        self._direction, self._current_steps, self._target_steps, self.distance_to_go, self._n, self._speed, self._step_interval_us)
 
   def move_to(self, absolute_steps):
     if self._target_steps != absolute_steps:
@@ -296,3 +296,15 @@ class AccelStepper:
 
   def stop(self):
     self._run_forever_future.cancel()
+
+  def predict_distance_to_go(self, target_steps):
+    """
+    Convenience function for any code that may want to know how many steps we will go
+    """
+    return target_steps - self._current_steps
+
+  def predict_direction(self, target_steps):
+    """
+    Convenience function for any code that may want to know what direction we would travel
+    """
+    return DIRECTION_CW if self.predict_distance_to_go(target_steps) > 0 else DIRECTION_CCW
