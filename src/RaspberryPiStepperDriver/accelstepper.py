@@ -3,7 +3,7 @@ Based on AccelStepper (http://www.airspayce.com/mikem/arduino/AccelStepper).
 Ported to Python by Alan Gibson.
 """
 from datetime import datetime
-import asyncio, logging, math, time
+import asyncio, logging, time
 import RPi.GPIO as GPIO
 
 log = logging.getLogger(__name__)
@@ -19,7 +19,11 @@ def sleep_microseconds(us_to_sleep):
 
 class AccelStepper:
 
-  def __init__(self, dir_pin, step_pin, enable_pin=None, pin_mode=GPIO.BCM):
+  def __init__(self, profile, dir_pin, step_pin, enable_pin=None, pin_mode=GPIO.BCM):
+
+    profile.parent = self
+    self._profile = profile
+
     # Time that this objec was instantiated. Used for computing micros()
     self._start_time = datetime.now()
     # Current stepper position in steps.
@@ -28,9 +32,6 @@ class AccelStepper:
     self._target_steps = 0
     # Current velocity/speed in steps per second
     self._speed = 0.0
-    #  Max velocity/speed in steps per second
-    self._target_speed = 1.0
-    self._acceleration = 0.0
     # Number of microseconds between steps
     self._step_interval_us = 0
     # Minimum stepper driver pulse width in microseconds.
@@ -40,23 +41,12 @@ class AccelStepper:
     self._direction = DIRECTION_CCW
     # Time in microseconds that last step occured
     self._last_step_time_us = 0
+
     # Pins
     self._dir_pin = dir_pin
     self._step_pin = step_pin
     self._enable_pin = enable_pin
     self._pin_mode = pin_mode
-    # Precomputed sqrt(2*_acceleration)
-    self._sqrt_twoa = 1.0
-    # Used for calculating acceleration
-    # Logical step number of current ramp. Not the same as physical step count.
-    # 'n' in the Austin paper
-    self._ramp_step_number = 0
-    # _timer_count is 'c' in Austin paper
-    self._ramp_delay_0_us = 0.0
-    # All timer counts > _ramp_delay_0_us. _timer_count is 'c' in Austin paper
-    self._ramp_delay_n_us = 0.0
-    # Minimum microseconds for ramp delay
-    self._ramp_delay_min_us = 1.0
 
   @property
   def currentPosition(self):
@@ -90,15 +80,17 @@ class AccelStepper:
 
   @property
   def is_moving(self):
-    return self._speed != 0.0 or self.distance_to_go != 0
+    # return self._speed != 0.0 or self.distance_to_go != 0
+    return self.distance_to_go != 0
 
   def set_pulse_width(self, pulse_width_us):
     self._pulse_width_us = pulse_width_us
 
-  def set_speed(self, speed):
+  #def set_speed(self, speed):
     """
     Arguments:
       speed (float): Speed/velocity in steps per second.
+    """
     """
     if speed == self._speed:
       return
@@ -109,6 +101,8 @@ class AccelStepper:
       self._step_interval_us = abs(1000000.0 / speed)
       self._direction = DIRECTION_CW if (speed > 0.0) else DIRECTION_CCW
     self._speed = speed
+    """
+    #algo.set_speed(self, speed)
 
   def set_target_speed(self, speed):
     """
@@ -116,6 +110,7 @@ class AccelStepper:
 
     Arguments:
       speed (float): Steps per second
+    """
     """
     if self._target_speed == speed:
       return
@@ -125,6 +120,8 @@ class AccelStepper:
     if (self._ramp_step_number > 0):
       self._ramp_step_number = ((self._speed * self._speed) / (2.0 * self._acceleration)) # Equation 16
       self._compute_new_speed()
+    """
+    self._profile.set_target_speed(speed)
 
   def set_target_speed_from_motor(self, motor_steps_per_rev, motor_rpm):
     steps_per_sec = (motor_steps_per_rev * motor_rpm) / 60
@@ -136,6 +133,7 @@ class AccelStepper:
     Arguments:
       acceleration (float). Acceleration in steps per second per second.
     """
+    """
     if acceleration == 0.0 or self._acceleration == acceleration:
       return
     # Recompute _ramp_step_number per Equation 17
@@ -144,8 +142,11 @@ class AccelStepper:
     self._ramp_delay_0_us = 0.676 * math.sqrt(2.0 / acceleration) * 1000000.0 # Equation 15
     self._acceleration = acceleration
     self._compute_new_speed()
+    """
+    self._profile.set_acceleration(acceleration)
 
   def _compute_new_speed(self):
+      """
       distanceTo = self.distance_to_go     # +ve is clockwise from curent location
       stepsToStop = int(((self._speed * self._speed) / (2.0 * self._acceleration))) # Equation 16
 
@@ -201,6 +202,8 @@ class AccelStepper:
 
       log.debug('Computed new speed. _direction=%s, _current_steps=%s, _target_steps=%s, distance_to_go=%s, _ramp_step_number=%s, _speed=%s, _step_interval_us=%s',
         self._direction, self._current_steps, self._target_steps, self.distance_to_go, self._ramp_step_number, self._speed, self._step_interval_us)
+      """
+      self._profile.compute_new_speed()
 
   def move_to(self, absolute_steps):
     """
@@ -245,6 +248,9 @@ class AccelStepper:
     """
     # Dont do anything unless we actually have a step interval
     if not self._step_interval_us:
+      return False
+    # Dont do anything unless we have somewhere to go
+    if not self.distance_to_go:
       return False
 
     # Time since this class was created in micrseconds.
@@ -293,11 +299,8 @@ class AccelStepper:
     Useful during initialisations or after initial positioning
     Sets speed to 0
     """
-    self._target_steps = self._current_steps = position
-    self._ramp_step_number = 0
-    self._step_interval_us = 0
-    self._speed = 0.0
-
+    self._profile.set_current_position(position)
+    
   def abort(self):
     self.set_current_position(self._current_steps)
 
@@ -333,3 +336,9 @@ class AccelStepper:
     Convenience function for any code that may want to know what direction we would travel
     """
     return DIRECTION_CW if self.predict_distance_to_go(target_steps) > 0 else DIRECTION_CCW
+
+  def calc_step_interval_us(self, speed):
+    return abs(1000000.0 / speed)
+
+  def calc_direction(self, speed):
+    return DIRECTION_CW if (speed > 0.0) else DIRECTION_CCW
