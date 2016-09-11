@@ -42,7 +42,12 @@ class MaxProfile:
 
     # Determine direction
     # HACK don't change anything if distance = 0 because we get a default value from calc_direction()
-    if self.parent.distance_to_go != 0:
+    if self.parent.distance_to_go == 0:
+      # We are at our destination. Nothing more to do
+      self.parent._current_speed = 0.0      
+      self.parent._step_interval_us = 0
+      return
+    else:
       self._last_direction = self.parent._direction
       self.parent._direction = self.parent.calc_direction(self.parent.distance_to_go)
 
@@ -82,4 +87,4 @@ class MaxProfile:
       _acceleration_increment, self.parent._target_speed)
 
   def set_current_position(self, position):
-    self._target_steps = self._current_steps = position
+    self.parent._target_steps = self.parent._current_steps = position
