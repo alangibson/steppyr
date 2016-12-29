@@ -1,3 +1,4 @@
+from . import RampProfile, DIRECTION_CW, DIRECTION_CCW
 """
 Calculates AccelStepper profile.
 Based on AccelStepper (http://www.airspayce.com/mikem/arduino/AccelStepper).
@@ -6,15 +7,13 @@ import logging, math
 
 log = logging.getLogger(__name__)
 
-# HACK put this somewhere common to accelstepper too
-DIRECTION_CCW = 0   # Clockwise
-DIRECTION_CW  = 1   # Counter-Clockwise
-
-class AccelProfile:
+class AccelProfile(RampProfile):
 
   def __init__(self):
+    super().__init__()
+
     # Acceleration in steps per second per second
-    self._acceleration = 0.0
+    # self._acceleration = 0.0
     # Precomputed sqrt(2*_acceleration)
     self._sqrt_twoa = 1.0
     # Used for calculating acceleration
@@ -28,9 +27,6 @@ class AccelProfile:
     # Minimum microseconds for ramp delay
     self._ramp_delay_min_us = 1.0
 
-  def init(self, parent):
-    self.parent = parent
-
   def set_target_speed(self, speed):
     """
     Set our requested ultimate cruising speed.
@@ -38,13 +34,13 @@ class AccelProfile:
     Arguments:
       speed (float): Steps per second
     """
-    if self.parent._target_speed == speed:
+    if self._target_speed == speed:
       return
-    self.parent._target_speed = speed
+    self._target_speed = speed
     self._ramp_delay_min_us = 1000000.0 / speed
     # Recompute _ramp_step_number from current speed and adjust speed if accelerating or cruising
     if (self._ramp_step_number > 0):
-      self._ramp_step_number = ((self.parent._current_speed * self.parent._current_speed) / (2.0 * self._acceleration)) # Equation 16
+      self._ramp_step_number = ((self._current_speed * self._current_speed) / (2.0 * self._acceleration)) # Equation 16
       self.compute_new_speed()
 
   def set_acceleration(self, acceleration):
@@ -63,13 +59,13 @@ class AccelProfile:
     self.compute_new_speed()
 
   def compute_new_speed(self):
-    distanceTo = self.parent.distance_to_go     # +ve is clockwise from curent location
-    stepsToStop = int(((self.parent._current_speed * self.parent._current_speed) / (2.0 * self._acceleration))) # Equation 16
+    distanceTo = self.distance_to_go     # +ve is clockwise from curent location
+    stepsToStop = int(((self._current_speed * self._current_speed) / (2.0 * self._acceleration))) # Equation 16
 
     if distanceTo == 0 and stepsToStop <= 1:
       # We are at the target and its time to stop
-      self.parent._step_interval_us = 0
-      self.parent._current_speed = 0.0
+      self._step_interval_us = 0
+      self._current_speed = 0.0
       self._ramp_step_number = 0
       return
 
@@ -78,12 +74,12 @@ class AccelProfile:
       # Need to go clockwise from here, maybe decelerate now
       if self._ramp_step_number > 0:
         # Currently accelerating, need to decel now? Or maybe going the wrong way?
-        if (stepsToStop >= distanceTo) or self.parent._direction == DIRECTION_CCW:
+        if (stepsToStop >= distanceTo) or self._direction == DIRECTION_CCW:
           # Start deceleration
           self._ramp_step_number = -stepsToStop
       elif self._ramp_step_number < 0:
         # Currently decelerating, need to accel again?
-        if (stepsToStop < distanceTo) and self.parent._direction == DIRECTION_CW:
+        if (stepsToStop < distanceTo) and self._direction == DIRECTION_CW:
           # Start accceleration
           self._ramp_step_number = -self._ramp_step_number
     elif distanceTo < 0:
@@ -91,12 +87,12 @@ class AccelProfile:
       # Need to go anticlockwise from here, maybe decelerate
       if self._ramp_step_number > 0:
         # Currently accelerating, need to decel now? Or maybe going the wrong way?
-        if (stepsToStop >= -distanceTo) or self.parent._direction == DIRECTION_CW:
+        if (stepsToStop >= -distanceTo) or self._direction == DIRECTION_CW:
           # Start deceleration
           self._ramp_step_number = -stepsToStop
       elif self._ramp_step_number < 0:
         # Currently decelerating, need to accel again?
-        if stepsToStop < -distanceTo and self.parent._direction == DIRECTION_CCW:
+        if stepsToStop < -distanceTo and self._direction == DIRECTION_CCW:
           # Start accceleration
           self._ramp_step_number = -self._ramp_step_number
 
@@ -104,29 +100,28 @@ class AccelProfile:
     if self._ramp_step_number == 0:
       # First step from stopped
       self._ramp_delay_n_us = self._ramp_delay_0_us
-      self.parent._direction = DIRECTION_CW if distanceTo > 0 else DIRECTION_CCW
+      self._direction = DIRECTION_CW if distanceTo > 0 else DIRECTION_CCW
     else:
       # Subsequent step. Works for accel (n is +_ve) and decel (n is -ve).
       self._ramp_delay_n_us = self._ramp_delay_n_us - ((2.0 * self._ramp_delay_n_us) / ((4.0 * self._ramp_step_number) + 1)) # Equation 13
       self._ramp_delay_n_us = max(self._ramp_delay_n_us, self._ramp_delay_min_us)
 
     self._ramp_step_number += 1
-    self.parent._step_interval_us = self._ramp_delay_n_us
-    self.parent._current_speed = 1000000.0 / self._ramp_delay_n_us
-    if self.parent._direction == DIRECTION_CCW:
-      self.parent._current_speed = -self.parent._current_speed
+    self._step_interval_us = self._ramp_delay_n_us
+    self._current_speed = 1000000.0 / self._ramp_delay_n_us
+    if self._direction == DIRECTION_CCW:
+      self._current_speed = -self._current_speed
 
     log.debug('Computed new speed. _direction=%s, _current_steps=%s, _target_steps=%s, distance_to_go=%s, _ramp_step_number=%s, _current_speed=%s, _step_interval_us=%s',
-      self.parent._direction, self.parent._current_steps,
-      self.parent._target_steps, self.parent.distance_to_go,
-      self._ramp_step_number, self.parent._current_speed, self.parent._step_interval_us)
+      self._direction, self._current_steps,
+      self._target_steps, self.distance_to_go,
+      self._ramp_step_number, self._current_speed, self._step_interval_us)
 
   def set_current_position(self, position):
     """
     Useful during initialisations or after initial positioning
-    Sets speed to 0
     """
-    self.parent._target_steps = self.parent._current_steps = position
+    self._target_steps = self._current_steps = position
     self._ramp_step_number = 0
-    self.parent._step_interval_us = 0
-    self.parent._current_speed = 0.0
+    self._step_interval_us = 0
+    self._current_speed = 0.0

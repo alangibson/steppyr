@@ -133,10 +133,13 @@ class TMC26XStepper:
     # store the current sense resistor value for later use
     self.resistor = resistor
 
+    # Delay between step pulses in microseconds
+    self.step_delay_us = 0
+
     # Both of these are needed to avoid div by 0 error in set_speed
     # Set a default speed in rpm
-    self.speed = 60
-    self.last_step_time = micros()
+    self.speed_rpm = 60
+    self.last_step_time_us = micros()
     self.driver_status_result = None
 
     # initizalize our status values
@@ -438,13 +441,19 @@ class TMC26XStepper:
       self.send262(driver_control_register_value)
 
     # recalculate the stepping delay by simply setting the speed again
-    self.set_speed(self.speed)
+    self.set_speed(self.speed_rpm)
 
-  def set_speed(self, what_speed):
-    self.speed = what_speed;
-    self.step_delay = (60 * 1000 * 1000) / ( self.number_of_steps * what_speed * self.microsteps)
+  def set_speed(self, what_speed_rpm):
+    """
+    Sets the speed in revs per minute (RPMs).
+    """
+    self.speed_rpm = what_speed_rpm;
+
+    # Set the time between steps in microsecnds
+    self.step_delay_us = (60 * 1000 * 1000) / ( self.number_of_steps * what_speed_rpm * self.microsteps)
+
     # update the next step time
-    self.next_step_time = self.last_step_time + self.step_delay
+    self.next_step_time_us = self.last_step_time_us + self.step_delay_us
 
   #
   # Movement methods
@@ -467,29 +476,34 @@ class TMC26XStepper:
       return -1
 
   def move(self):
+    """
+    Move 1 step if it is time for another step. Otherwise, do nothing.
+    Pulse duty cycle is apparently undefined. Pulse ends as quickly as possible.
+    Returns -1 if a step occured, 0 otherwise.
+    """
     # decrement the number of steps, moving one step each time:
     if self.steps_left > 0:
       current_time = micros();
       # move only if the appropriate delay has passed:
-      if current_time >= self.next_step_time:
+      if current_time >= self.next_step_time_us:
 
         # step forward or back, depending on direction:
         if self.direction == 1:
-          digitalWrite(self.step_pin, HIGH)
+          GPIO.output(self.step_pin, GPIO.HIGH)
         else:
-          digitalWrite(self.dir_pin, HIGH)
-          digitalWrite(self.step_pin, HIGH)
+          GPIO.output(self.dir_pin, GPIO.HIGH)
+          GPIO.output(self.step_pin, GPIO.HIGH)
 
         # get the timeStamp of when you stepped:
-        self.last_step_time = current_time
-        self.next_step_time = current_time + self.step_delay
+        self.last_step_time_us = current_time
+        self.next_step_time_us = current_time + self.step_delay_us
 
         # decrement the steps left:
         self.steps_left = self.steps_left - 1
 
         # disable the step & dir pins
-        digitalWrite(self.step_pin, LOW);
-        digitalWrite(self.dir_pin, LOW);
+        GPIO.output(self.step_pin, GPIO.LOW);
+        GPIO.output(self.dir_pin, GPIO.LOW);
       return -1
     return 0
 

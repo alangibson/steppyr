@@ -106,6 +106,9 @@ class StepperDriver:
       direction = 1 if self._steps_to_move > 0 else -1
       self.set_direction(direction)
 
+      # TODO Doing sleep_microseconds(self.pulse_duration_us) twice here is wrong.
+      # This assumes a 50% duty cycle, which may not always be true.
+
       # Move the motor one step
       ts = time.time()
       GPIO.output(self.step_pin, GPIO.HIGH)

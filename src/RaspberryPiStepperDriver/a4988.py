@@ -1,7 +1,7 @@
-from RaspberryPiStepperDriver import base
+from RaspberryPiStepperDriver import stepdir
 import RPi.GPIO as GPIO
 
-class A4988(base.StepperDriver):
+class A4988(stepdir.StepperDriver):
 
     microstep_table = {
         0: int('000', 2),

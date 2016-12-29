@@ -8,11 +8,6 @@ class SPI:
   http://www.takaitra.com/posts/492
   """
   def __init__(self, bus=0, device=0):
-    # Convenience behavior for debugging
-    if bus == None or device == None:
-      self._spi = None
-      return
-
     self._spi = spidev.SpiDev()
     self._spi.open(bus, device)
     self._spi.bits_per_word = 8
@@ -22,9 +17,4 @@ class SPI:
     self._spi.mode = 0b11
 
   def transfer(self, payload):
-    if self._spi:
-      return self._spi.xfer2(payload)
-    else:
-      # Convenience behavior for debugging
-      log.debug(payload)
-      return [0 for x in payload]
+    return self._spi.xfer2(payload)

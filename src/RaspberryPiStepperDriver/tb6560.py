@@ -1,6 +1,6 @@
-from RaspberryPiStepperDriver import base
+from RaspberryPiStepperDriver import stepdir
 
-class TB6560(base.StepperDriver):
+class TB6560(stepdir.StepperDriver):
   """
   Set the constructors microsteps argument to match the number of microsteps
   set on the drivers hardware switches.
