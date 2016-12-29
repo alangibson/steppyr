@@ -1,4 +1,4 @@
-from pytmc import spi, tmc26x
+from RaspberryPiStepperDriver import spi, tmc26x
 
 def init():
   try:

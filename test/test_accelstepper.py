@@ -1,19 +1,21 @@
 import asyncio, logging, time
 from RaspberryPiStepperDriver import accelstepper
+from RaspberryPiStepperDriver.profiles import accel
 
 logging.basicConfig(level=logging.DEBUG)
 
-stepper = accelstepper.AccelStepper(999,999)
+# def __init__(self, profile, dir_pin, step_pin, enable_pin=None, pin_mode=GPIO.BCM):
+stepper = accelstepper.AccelStepper(accel.AccelProfile(), 999, 999, 999)
 stepper.start()
 
 motor_steps_per_rev = 200
 motor_max_rpm = 200
 
 # steps per second
-stepper.set_max_speed_from_motor(motor_steps_per_rev, motor_max_rpm)
-stepper.acceleration = 1000 # steps per second per second
+stepper.set_target_speed(motor_steps_per_rev * ( motor_max_rpm / 60 ) )
+stepper.set_acceleration(1000) # steps per second per second
 # Pulse width is defined by the stepper driver. 1.9us for the TB6560
-stepper.pulse_width = 2
+stepper.set_pulse_width(2)
 
 async def doit():
     stepper.moveTo(100)
