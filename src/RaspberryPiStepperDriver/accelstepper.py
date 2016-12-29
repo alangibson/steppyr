@@ -25,6 +25,8 @@ class AccelStepper:
     self._current_steps = 0
     # Last requested absolute target position in steps
     self._target_steps = 0
+    # Previously set _target_steps. Used in calculating ramps
+    self._previous_target_steps = 0
     # Current velocity/speed in steps per second
     self._current_speed = 0.0
     #  Max velocity/speed in steps per second
@@ -108,6 +110,7 @@ class AccelStepper:
     Move to an absolute number of steps.
     """
     if self._target_steps != absolute_steps:
+      self._previous_target_steps = self._target_steps
       self._target_steps = absolute_steps
       self._compute_new_speed()
 

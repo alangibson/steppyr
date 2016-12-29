@@ -44,7 +44,7 @@ class MaxProfile:
     # HACK don't change anything if distance = 0 because we get a default value from calc_direction()
     if self.parent.distance_to_go == 0:
       # We are at our destination. Nothing more to do
-      self.parent._current_speed = 0.0      
+      self.parent._current_speed = 0.0
       self.parent._step_interval_us = 0
       return
     else:
@@ -62,15 +62,20 @@ class MaxProfile:
 
     # Determine our speed
     # If we changed direction, start ramp over
+    # FIXME because of the way the elif conditions work, it is not possible to move < _acceleration_steps steps.
     if self._last_direction != self.parent._direction:
-      # This is our first step from stop
-      # log.debug('Resetting _current_speed to %s', self._max_start_speed)
+      # This is our first step from stop, which is a special case due to _max_start_speed.
       _current_speed = self._max_start_speed
-    else:
+    elif abs(self.parent.distance_to_go) > self._acceleration_steps:
       if _current_speed < self.parent._target_speed:
         # We are accelerating
         _current_speed = constrain(_current_speed + _acceleration_increment,
           self._max_start_speed, self.parent._target_speed)
+      # else: we are cruising
+    elif abs(self.parent.distance_to_go) <= self._acceleration_steps:
+      # If we get here, we should already be at cruising speed.
+      # We are within _acceleration_steps of the end point. Start decelerating.
+      _current_speed = _current_speed - _acceleration_increment
 
     # Adjust for signed-ness direction
     if self.parent._direction == DIRECTION_CCW:
