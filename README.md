@@ -2,6 +2,30 @@
 
 Python Raspberry Pi library for the STEP/DIR stepper drivers.
 
+## Usage
+
+There are currently 3 distinct driver implementations:
+
+stepdir.StepperDriver
+  Basic step/dir driver
+  No ramping support
+  All drivers not listed below inherit from this one.
+
+tmc26x.TMC26XStepper
+  No ramping support
+
+accelstepper.AccelStepper
+  A port of the Arduino AccelStepper library.
+  Supports configurable ramp profiles.
+    profiles.accel.AccelProfile
+      The original AccelStepper profile
+    profiles.max.MaxProfile
+      A simple profile that accelerates and decelerates as fast as possible.
+
+## Testing
+
+  ./test/test.sh
+
 ## Trinamic Support
 
 TMC 260/261/262/2660 Stepper library for Python
