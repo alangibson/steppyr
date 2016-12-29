@@ -16,6 +16,7 @@ class MaxProfile:
     self._acceleration_steps = acceleration_steps
     # Max speed that the motor can start at in steps per second
     self._max_start_speed = max_start_speed
+    self._deceleration_steps = 5
 
   def init(self, parent):
     self.parent = parent
@@ -51,31 +52,40 @@ class MaxProfile:
       self._last_direction = self.parent._direction
       self.parent._direction = self.parent.calc_direction(self.parent.distance_to_go)
 
+    # Make sure accelerate and decelerate ramps don't overlap
+    _steps_being_moved = abs(abs(self.parent._target_steps) - abs(self.parent._previous_target_steps))
+    _adjusted_deceleration_steps = min(self._deceleration_steps, _steps_being_moved - self._acceleration_steps)
+    # HACK fix the math so this conditional is not needed
+    if _adjusted_deceleration_steps <= 0:
+      _adjusted_deceleration_steps = 1
+
     # Calculate the rate in steps at which we should accelerate
     if self._acceleration_steps <= 0:
       _acceleration_increment = self.parent._target_speed
     else:
       _acceleration_increment = (self.parent._target_speed - self._max_start_speed) / self._acceleration_steps
+    # Calculate the rate in steps at which we should decelerate
+    if self._deceleration_steps <= 0:
+      _deceleration_increment = self.parent._target_speed
+    else:
+      _deceleration_increment = self.parent._target_speed / _adjusted_deceleration_steps
 
     # Calculations are simpler if we use the absolute value of the current speed
     _current_speed = abs(self.parent._current_speed)
 
     # Determine our speed
     # If we changed direction, start ramp over
-    # FIXME because of the way the elif conditions work, it is not possible to move < _acceleration_steps steps.
     if self._last_direction != self.parent._direction:
       # This is our first step from stop, which is a special case due to _max_start_speed.
       _current_speed = self._max_start_speed
-    elif abs(self.parent.distance_to_go) > self._acceleration_steps:
-      if _current_speed < self.parent._target_speed:
+    elif (_steps_being_moved - abs(self.parent.distance_to_go)) <= self._acceleration_steps:
         # We are accelerating
         _current_speed = constrain(_current_speed + _acceleration_increment,
           self._max_start_speed, self.parent._target_speed)
       # else: we are cruising
-    elif abs(self.parent.distance_to_go) <= self._acceleration_steps:
-      # If we get here, we should already be at cruising speed.
+    elif abs(self.parent.distance_to_go) < _adjusted_deceleration_steps:
       # We are within _acceleration_steps of the end point. Start decelerating.
-      _current_speed = _current_speed - _acceleration_increment
+      _current_speed = _current_speed - _deceleration_increment
 
     # Adjust for signed-ness direction
     if self.parent._direction == DIRECTION_CCW:
@@ -90,6 +100,9 @@ class MaxProfile:
       self.parent._target_steps, self.parent.distance_to_go,
       self.parent._current_speed, self.parent._step_interval_us,
       _acceleration_increment, self.parent._target_speed)
+    #log.debug('_acceleration_increment %s _deceleration_increment %s _adjusted_deceleration_steps %s',
+    #  _acceleration_increment,_deceleration_increment, _adjusted_deceleration_steps)
+    # log.debug('_steps_being_moved %s _adjusted_deceleration_steps %s', _steps_being_moved, _adjusted_deceleration_steps)
 
   def set_current_position(self, position):
     self.parent._target_steps = self.parent._current_steps = position
