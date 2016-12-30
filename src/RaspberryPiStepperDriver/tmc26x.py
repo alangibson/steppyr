@@ -53,7 +53,7 @@ REGISTERS = {
   'DRIVER_CONFIG_REGISTER': 0xE0000
 }
 
-# definitions for the driver control register
+# definitions for the driver control (DRVCTRL) register
 DRIVER_CONTROL_REGISTER = {
   'MICROSTEPPING_PATTERN': 0xF,
   'STEP_INTERPOLATION': 0x200,
@@ -135,12 +135,12 @@ class TMC26XStepper:
     # Holds the last result read from the spi bus
     self.driver_status_result = None
     # setting the default register values
-    self.driver_control_register_value = REGISTERS['DRIVER_CONTROL_REGISTER'] | INITIAL_MICROSTEPPING
+    self.driver_control_register_value = set_bit(REGISTERS['DRIVER_CONTROL_REGISTER'], INITIAL_MICROSTEPPING)
     self.microsteps = (1 << INITIAL_MICROSTEPPING)
     self.chopper_config_register = REGISTERS['CHOPPER_CONFIG_REGISTER']
     self.cool_step_register_value = REGISTERS['COOL_STEP_REGISTER']
     self.stall_guard2_current_register_value = REGISTERS['STALL_GUARD2_LOAD_MEASURE_REGISTER']
-    self.driver_configuration_register_value = REGISTERS['DRIVER_CONFIG_REGISTER'] | DRIVER_CONTROL_REGISTER['READ_STALL_GUARD_READING']
+    self.driver_configuration_register_value = set_bit(REGISTERS['DRIVER_CONFIG_REGISTER'], DRIVER_CONTROL_REGISTER['READ_STALL_GUARD_READING'])
 
   def send262(self, datagram):
     """
@@ -149,9 +149,9 @@ class TMC26XStepper:
     """
     # Send datagram to driver
     msg = [ ((datagram >> 16) & 0xff), ((datagram >>  8) & 0xff), ((datagram) & 0xff) ]
-    log.debug('send262  >> %s', tobin(datagram, 20))
+    log.debug('spi  >> %s', tobin(datagram, 20))
     out = self.spi.transfer(msg)
-    log.debug('send262 <<  %s', tobin(out[0], 20))
+    log.debug('spi <<  %s', tobin(out[0], 20))
 
     # Process and save the response
     response = out[0]
@@ -261,9 +261,6 @@ class TMC26XStepper:
 
     TODO functionally the same as AccelStepper
     """
-    # log.debug('run_at_speed _step_interval_us=%s distance_to_go=%s',
-    #  self._profile._step_interval_us, self._profile.distance_to_go)
-
     # Dont do anything unless we actually have a step interval
     # Dont do anything unless we have somewhere to go
     if not self._profile._step_interval_us or not self._profile.distance_to_go:
@@ -279,7 +276,6 @@ class TMC26XStepper:
         current_time_us, next_step_time_us, self._profile._step_interval_us, self._profile._direction)
 
       # decrement the steps left:
-      # self.distance_to_go = self.distance_to_go - 1
       if self._profile._direction == DIRECTION_CW:
         # Clockwise
         self._profile._current_steps += 1
@@ -288,20 +284,11 @@ class TMC26XStepper:
         self._profile._current_steps -= 1
 
       # step forward or back, depending on direction:
-      #if self._direction == DIRECTION_CW:
-      #  GPIO.output(self.step_pin, GPIO.HIGH)
-      #else:
-      #  GPIO.output(self.dir_pin, GPIO.HIGH)
-      #  GPIO.output(self.step_pin, GPIO.HIGH)
       self.step(self._profile._direction)
 
       # get the timeStamp of when you stepped:
       self._last_step_time_us = current_time_us
       self._next_step_time_us = current_time_us + self._profile._step_interval_us
-
-      # disable the step & dir pins
-      # GPIO.output(self.step_pin, GPIO.LOW);
-      # GPIO.output(self.dir_pin, GPIO.LOW);
       return True
     else:
       # No step necessary at this time
@@ -406,7 +393,7 @@ class TMC26XStepper:
     # delete the old value
     self.driver_control_register_value &= 0xFFFF0
     # set the new value
-    self.driver_control_register_value |= setting_pattern
+    self.driver_control_register_value = set_bit(self.driver_control_register_value, setting_pattern)
 
     # if started we directly send it to the motor
     if self.started:
@@ -447,10 +434,10 @@ class TMC26XStepper:
 
   def set_enabled(self, enabled):
     # delete the t_off in the chopper config to get sure
-    self.chopper_config_register &= ~ CHOPPER_CONFIG_REGISTER['T_OFF_PATTERN']
+    self.chopper_config_register = unset_bit(self.chopper_config_register, CHOPPER_CONFIG_REGISTER['T_OFF_PATTERN'])
     if enabled:
       # and set the t_off time
-      self.chopper_config_register |= self.constant_off_time
+      self.chopper_config_register = set_bit(self.chopper_config_register, self.constant_off_time)
     # if not enabled we don't have to do anything since we already delete t_off from the register
     if self.started:
       self.send262(self.chopper_config_register)
@@ -464,7 +451,7 @@ class TMC26XStepper:
 
     resistor_value = self.resistor
     # remove vesense flag
-    self.driver_configuration_register_value &= ~ DRIVER_CONTROL_REGISTER['VSENSE']
+    self.driver_configuration_register_value = unset_bit(self.driver_configuration_register_value, DRIVER_CONTROL_REGISTER['VSENSE'])
 
     # This is derrived from I=(cs+1)/32*(Vsense/Rsense)
     # leading to cs = CS = 32*R*I/V (with V = 0,31V oder 0,165V  and I = 1000*current)
@@ -475,7 +462,7 @@ class TMC26XStepper:
     # check if the current scalingis too low
     if current_scaling < 16:
       # set the csense bit to get a use half the sense voltage (to support lower motor currents)
-      self.driver_configuration_register_value |= DRIVER_CONTROL_REGISTER['VSENSE']
+      self.driver_configuration_register_value = set_bit(self.driver_configuration_register_value, DRIVER_CONTROL_REGISTER['VSENSE'])
       # and recalculate the current setting
       current_scaling = int(( ( resistor_value * current_ma * 32.0 / ( 0.165 * 1000.0 * 1000.0 ) ) - 0.5) )# theoretically - 1.0 for better rounding it is 0.5
 
@@ -484,9 +471,10 @@ class TMC26XStepper:
       current_scaling = 31
 
     # delete the old value
-    self.stall_guard2_current_register_value &= ~STALL_GUARD_REGISTER['CURRENT_SCALING_PATTERN']
+    self.stall_guard2_current_register_value = unset_bit(self.stall_guard2_current_register_value, STALL_GUARD_REGISTER['CURRENT_SCALING_PATTERN'])
     # set the new current scaling
-    self.stall_guard2_current_register_value |= current_scaling
+    self.stall_guard2_current_register_value = set_bit(self.stall_guard2_current_register_value, current_scaling)
+
     # if started we directly send it to the motor
     if self.started:
       self.send262(self.driver_configuration_register_value)
@@ -498,7 +486,7 @@ class TMC26XStepper:
     result = self.stall_guard2_current_register_value & STALL_GUARD_REGISTER['CURRENT_SCALING_PATTERN']
     resistor_value = self.resistor
     voltage = 0.165 if (self.driver_configuration_register_value & DRIVER_CONTROL_REGISTER['VSENSE']) else 0.31
-    result = ( result + 1.0 ) / 32.0 * voltage / resistor_value * 1000.0 *1000.0
+    result = ( result + 1.0 ) / 32.0 * voltage / resistor_value * 1000.0 * 1000.0
     return result
 
   def set_constant_off_time_chopper(self, constant_off_time, blank_time, fast_decay_time_setting, sine_wave_offset, use_current_comparator):
@@ -550,33 +538,37 @@ class TMC26XStepper:
     elif sine_wave_offset > 12:
       sine_wave_offset = 12
     # shift the sine_wave_offset
-    sine_wave_offset +=3
+    sine_wave_offset += 3
 
     # calculate the register setting
     # first of all delete all the values for this
-    self.chopper_config_register &= ~ ( (1 << 12)
-      | CHOPPER_CONFIG_REGISTER['BLANK_TIMING_PATTERN']
-      | CHOPPER_CONFIG_REGISTER['HYSTERESIS_DECREMENT_PATTERN']
-      | CHOPPER_CONFIG_REGISTER['HYSTERESIS_LOW_VALUE_PATTERN']
-      | CHOPPER_CONFIG_REGISTER['HYSTERESIS_START_VALUE_PATTERN']
-      | CHOPPER_CONFIG_REGISTER['T_OFF_TIMING_PATERN'] )
+    self.chopper_config_register = unset_bit(
+      self.chopper_config_register,
+      ( (1 << 12) | CHOPPER_CONFIG_REGISTER['BLANK_TIMING_PATTERN']
+                  | CHOPPER_CONFIG_REGISTER['HYSTERESIS_DECREMENT_PATTERN']
+                  | CHOPPER_CONFIG_REGISTER['HYSTERESIS_LOW_VALUE_PATTERN']
+                  | CHOPPER_CONFIG_REGISTER['HYSTERESIS_START_VALUE_PATTERN']
+                  | CHOPPER_CONFIG_REGISTER['T_OFF_TIMING_PATERN'] ) )
 
     # set the constant off pattern
-    self.chopper_config_register |= CHOPPER_CONFIG_REGISTER['CHOPPER_MODE_T_OFF_FAST_DECAY']
+    self.chopper_config_register = set_bit(self.chopper_config_register, CHOPPER_CONFIG_REGISTER['CHOPPER_MODE_T_OFF_FAST_DECAY'])
     # set the blank timing value
-    self.chopper_config_register |= blank_value << CHOPPER_CONFIG_REGISTER['BLANK_TIMING_SHIFT']
+    self.chopper_config_register = set_bit(self.chopper_config_register, blank_value << CHOPPER_CONFIG_REGISTER['BLANK_TIMING_SHIFT'])
     #setting the constant off time
-    self.chopper_config_register |= constant_off_time
+    self.chopper_config_register = set_bit(self.chopper_config_register, constant_off_time)
     #set the fast decay time
     #set msb
-    self.chopper_config_register |= (fast_decay_time_setting & 0x8) << CHOPPER_CONFIG_REGISTER['HYSTERESIS_DECREMENT_SHIFT']
+    self.chopper_config_register = set_bit(self.chopper_config_register,
+      (fast_decay_time_setting & 0x8) << CHOPPER_CONFIG_REGISTER['HYSTERESIS_DECREMENT_SHIFT'])
     #other bits
-    self.chopper_config_register |= (fast_decay_time_setting & 0x7) << CHOPPER_CONFIG_REGISTER['HYSTERESIS_START_VALUE_SHIFT']
+    self.chopper_config_register = set_bit(self.chopper_config_register,
+      (fast_decay_time_setting & 0x7) << CHOPPER_CONFIG_REGISTER['HYSTERESIS_START_VALUE_SHIFT'])
     #set the sine wave offset
-    self.chopper_config_register |= sine_wave_offset << CHOPPER_CONFIG_REGISTER['HYSTERESIS_LOW_SHIFT']
+    self.chopper_config_register = set_bit(self.chopper_config_register,
+      sine_wave_offset << CHOPPER_CONFIG_REGISTER['HYSTERESIS_LOW_SHIFT'])
     #using the current comparator?
     if not use_current_comparator:
-      self.chopper_config_register |= (1<<12);
+      self.chopper_config_register = set_bit(self.chopper_config_register, (1<<12))
     #if started we directly send it to the motor
     # TODO is this right? Shouldnt we send self.chopper_config_register?
     if self.started:
@@ -611,6 +603,20 @@ class TMC26XStepper:
     if self.started:
       self.send262(self.stall_guard2_current_register_value)
 
+  def set_step_interpolation(self, enable=True):
+    """
+    Enable or disable STEP interpolation.
+
+    False: Disable STEP pulse interpolation.
+    True: Enable STEP pulse multiplication by 16.
+    """
+    if enable:
+      self.driver_configuration_register_value = set_bit(self.driver_configuration_register_value, DRIVER_CONTROL_REGISTER['STEP_INTERPOLATION'])
+    else:
+      self.driver_configuration_register_value = unset_bit(self.driver_configuration_register_value, DRIVER_CONTROL_REGISTER['STEP_INTERPOLATION'])
+    if self.started:
+      self.send262(self.driver_configuration_register_value)
+
   def get_stall_guard_threshold(self):
     stall_guard_threshold = self.stall_guard2_current_register_value & STALL_GUARD_REGISTER['STALL_GUARD_VALUE_PATTERN']
     # shift it down to bit 0
@@ -624,9 +630,9 @@ class TMC26XStepper:
 
   def get_stall_guard_filter(self):
     if self.stall_guard2_current_register_value & STALL_GUARD_REGISTER['STALL_GUARD_FILTER_ENABLED']:
-      return -1
+      return True
     else:
-      return 0
+      return False
 
   #
   # Status methods
@@ -636,6 +642,8 @@ class TMC26XStepper:
     """
     read_value: One of TMC26X_READOUT_STALLGUARD or TMC26X_READOUT_CURRENT.
                 All other cases are ignored to prevent funny values.
+
+    Returns self.driver_status_result for convenience.
     """
     old_driver_configuration_register_value = self.driver_configuration_register_value
     # reset the readout configuration
@@ -652,6 +660,7 @@ class TMC26XStepper:
       self.send262(self.driver_configuration_register_value)
     # write the configuration to get the last status
     self.send262(self.driver_configuration_register_value)
+    return self.driver_status_result
 
   def get_readout_value(self):
     """
@@ -659,6 +668,11 @@ class TMC26XStepper:
     returns -1 if stallguard inforamtion is not present
     """
     return self.get_driver_status() >> 10
+
+  def get_driver_status(self):
+    if self.driver_status_result == None:
+      raise ValueError('driver_status_result is empty. Call read_status() first.')
+    return self.driver_status_result
 
   def get_motor_position(self):
     # we read it out even if we are not started yet - perhaps it is useful information for somebody
@@ -671,7 +685,7 @@ class TMC26XStepper:
     returns -1 if stallguard information is not present
     """
     # if we don't yet started there cannot be a stall guard value
-    if not started:
+    if not self.started:
       return -1
     # not time optimal, but solution optiomal:
     # first read out the stall guard value
@@ -681,7 +695,7 @@ class TMC26XStepper:
   def get_current_cs_reading(self):
     # if we don't yet started there cannot be a stall guard value
     if not started:
-      return 0
+      return False
     # not time optimal, but solution optiomal:
     # first read out the stall guard value
     self.read_status(TMC26X_READOUT_CURRENT)
@@ -702,11 +716,6 @@ class TMC26XStepper:
       return False
     return (self.get_driver_status() & STATUS_STALL_GUARD_STATUS)
 
-  def get_driver_status(self):
-    if self.driver_status_result == None:
-      raise ValueError('driver_status_result is empty. Call read_status() first.')
-    return self.driver_status_result
-
   def get_over_temperature(self):
     """
     returns if there is any over temperature condition:
@@ -715,12 +724,12 @@ class TMC26XStepper:
     Any of those levels are not too good.
     """
     if self.started:
-      return 0
+      return False
     if self.get_driver_status() & STATUS_OVER_TEMPERATURE_SHUTDOWN:
       return TMC26X_OVERTEMPERATURE_SHUTDOWN
     if self.get_driver_status() & STATUS_OVER_TEMPERATURE_WARNING:
       return TMC26X_OVERTEMPERATURE_PREWARING
-    return 0
+    return False
 
   def is_short_to_ground_a(self):
     """
@@ -775,3 +784,13 @@ class TMC26XStepper:
       return True
     else:
       return False
+
+def unset_bit(value, mask):
+  new_value = value & ~ mask
+  log.debug('unsetting bit(s) %s %s -> %s', bin(value), bin(mask), bin(new_value))
+  return new_value
+
+def set_bit(value, mask):
+  new_value = value | mask
+  log.debug('setting bit(s) %s %s -> %s', bin(value), bin(mask), bin(new_value))
+  return new_value
