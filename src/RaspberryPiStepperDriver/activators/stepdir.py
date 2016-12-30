@@ -1,12 +1,15 @@
+import logging
 import RPi.GPIO as GPIO
 from .. import DIRECTION_CW, DIRECTION_CCW, sleep_microseconds
+
+log = logging.getLogger(__name__)
 
 class StepDirActivator:
 
   def __init__(self, dir_pin, step_pin, enable_pin=None, pin_mode=GPIO.BCM):
     # Minimum stepper driver pulse width in microseconds.
     # This is how long logic voltage will be applied to the STEP pin.
-    self._pulse_width_us = 1
+    self._pulse_width_us = 2
 
     # Pins
     self._dir_pin = dir_pin
@@ -44,6 +47,7 @@ class StepDirActivator:
     """
     Unconditionally perform a step.
     """
+    # log.debug('Step direction=%s pulse_width_us=%s', direction, self._pulse_width_us)
     # Set direction first else get rogue pulses
     GPIO.output(self._dir_pin, GPIO.LOW if direction == DIRECTION_CCW else GPIO.HIGH)
     GPIO.output(self._step_pin, GPIO.HIGH)
