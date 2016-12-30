@@ -1,0 +1,22 @@
+#!/bin/sh
+
+PYTHONPATH="$PWD/src:$PYTHONPATH"
+
+# Possibly load GPIO mock
+python3 -c 'import RPi.GPIO as GPIO' > /dev/null 2>&1
+if [ $? -ne 0 ]; then
+  PYTHONPATH="$PWD/test/mock:$PYTHONPATH"
+fi
+
+export PYTHONPATH
+
+echo "TMC26X Driver Shell"
+echo
+echo "Example usage"
+echo
+echo "  driver.set_target_speed(100)"
+echo "  driver.move_to(100)"
+echo "  loop.run_until_complete(driver.run_until_done())"
+echo
+
+python3 -i bin/tmc26x_shell.py
