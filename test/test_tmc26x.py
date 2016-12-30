@@ -1,4 +1,5 @@
 from RaspberryPiStepperDriver import spi, tmc26x
+from RaspberryPiStepperDriver.profiles import rectangle
 
 def init():
   try:
@@ -7,7 +8,8 @@ def init():
     # No SPI bus is available. Use a fake
     spi_dev = spi.SPI(None, None)
   # number_of_steps, dir_pin, step_pin, current, resistor (milliohms)
-  driver = tmc26x.TMC26XStepper(spi_dev, 200, 23, 18, 300, 150)
+  profile = rectangle.RectangleProfile()
+  driver = tmc26x.TMC26XStepper(spi_dev, profile, 23, 18, 300, 150)
   return (spi_dev, driver)
 
 def test_dump():
@@ -46,9 +48,9 @@ def test_dump():
   print('  stall_guard2_current_register_value ', tmc26x.tobin(driver.stall_guard2_current_register_value, 20))
   print('  driver_configuration_register_value ', tmc26x.tobin(driver.driver_configuration_register_value, 20))
 
-  print('steps left', driver.steps_left)
+  print('steps left', driver.distance_to_go)
   driver.step(100)
-  print('steps left', driver.steps_left)
+  print('steps left', driver.distance_to_go)
 
 def test_get_current():
   spi_dev, driver = init()
