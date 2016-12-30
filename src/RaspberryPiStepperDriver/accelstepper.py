@@ -32,6 +32,10 @@ class AccelStepper:
   def is_moving(self):
     return self._profile.distance_to_go != 0
 
+  @property
+  def distance_to_go(self):
+    return self._profile.distance_to_go
+
   def set_pulse_width(self, pulse_width_us):
     """
     Set the step pulse width in microseconds.

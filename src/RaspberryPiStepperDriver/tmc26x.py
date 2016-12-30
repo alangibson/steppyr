@@ -344,6 +344,10 @@ class TMC26XStepper:
   def is_moving(self):
     return self._profile.distance_to_go != 0
 
+  @property
+  def distance_to_go(self):
+    return self._profile.distance_to_go
+
   def stop(self):
     # note to self if the motor is currently moving
     # stop the motor
