@@ -100,7 +100,7 @@ class AccelProfile(RampProfile):
     if self._ramp_step_number == 0:
       # First step from stopped
       self._ramp_delay_n_us = self._ramp_delay_0_us
-      self._direction = DIRECTION_CW if distanceTo > 0 else DIRECTION_CCW
+      self._direction = self._current_direction()
     else:
       # Subsequent step. Works for accel (n is +_ve) and decel (n is -ve).
       self._ramp_delay_n_us = self._ramp_delay_n_us - ((2.0 * self._ramp_delay_n_us) / ((4.0 * self._ramp_step_number) + 1)) # Equation 13

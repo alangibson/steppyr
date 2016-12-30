@@ -1,5 +1,5 @@
 import logging
-from . import RampProfile
+from . import RampProfile, DIRECTION_CW, DIRECTION_CCW
 
 log = logging.getLogger(__name__)
 

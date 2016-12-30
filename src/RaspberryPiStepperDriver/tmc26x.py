@@ -1,8 +1,11 @@
-import time
-
+import asyncio, logging, time
+from . import DIRECTION_CW, DIRECTION_CCW, micros
+from .activators import stepdir as stepdir_act
 """
 Ported to python from https://github.com/trinamic/TMC26XStepper
 """
+
+log = logging.getLogger(__name__)
 
 # some default values used in initialization
 DEFAULT_MICROSTEPPING_VALUE = 32
@@ -105,52 +108,32 @@ MICROSTEP_RESOLUTION = {
 # default values
 INITIAL_MICROSTEPPING = MICROSTEP_RESOLUTION[32]
 
-def micros():
-  """
-  Mymics the Arduino micros() function.
-  """
-  return int(time.time() * 1000000)
-
 tobin = lambda x, n: format(x, 'b').ljust(n, '0')
 
 class TMC26XStepper:
   """
-  int number_of_steps, int cs_pin, int dir_pin, int step_pin, unsigned int current, unsigned int resistor
+  Arguments
+    dir_pin - the pin where the direction pin is connected
+    step_pin - the pin where the step pin is connected
+    current - chopper current in milliamps
+    resistor - sense resistor value
   """
-  def __init__(self, spi, number_of_steps, dir_pin, step_pin, current, resistor):
+  def __init__(self, spi, profile, dir_pin, step_pin, current, resistor=150):
+    self._profile = profile
+    self._activator = stepdir_act.StepDirActivator(dir_pin, step_pin)
     self.spi = spi
-
-    # save the number of steps
-    self.number_of_steps = number_of_steps
+    # store the current and sense resistor value for later use
+    self.resistor = resistor
+    self.current = current
+    # Both of these are needed to avoid div by 0 error in set_speed
+    # Set a default speed in rpm
+    self._last_step_time_us = micros()
     # we are not started yet
     self.started = False
     # by default cool step is not enabled
     self.cool_step_enabled = False
-
-    # save the pins for later use
-    self.dir_pin = dir_pin
-    self.step_pin = step_pin
-    # store the current sense resistor value for later use
-    self.resistor = resistor
-
-    # Delay between step pulses in microseconds
-    self.step_delay_us = 0
-
-    # Both of these are needed to avoid div by 0 error in set_speed
-    # Set a default speed in rpm
-    self.speed_rpm = 60
-    self.last_step_time_us = micros()
+    # Holds the last result read from the spi bus
     self.driver_status_result = None
-
-    # initizalize our status values
-    self.steps_left = 0
-    self.direction = 0
-    self.spi_steps = 0
-
-    # initialize register values
-    self.driver_control_register_value = REGISTERS['DRIVER_CONTROL_REGISTER'] | INITIAL_MICROSTEPPING
-    self.chopper_config_register = REGISTERS['CHOPPER_CONFIG_REGISTER']
-
     # setting the default register values
     self.driver_control_register_value = REGISTERS['DRIVER_CONTROL_REGISTER'] | INITIAL_MICROSTEPPING
     self.microsteps = (1 << INITIAL_MICROSTEPPING)
@@ -159,13 +142,6 @@ class TMC26XStepper:
     self.stall_guard2_current_register_value = REGISTERS['STALL_GUARD2_LOAD_MEASURE_REGISTER']
     self.driver_configuration_register_value = REGISTERS['DRIVER_CONFIG_REGISTER'] | DRIVER_CONTROL_REGISTER['READ_STALL_GUARD_READING']
 
-    # set the current
-    self.set_current(current)
-    # set to a conservative start value
-    self.set_constant_off_time_chopper(7, 54, 13, 12, 1)
-    # set a nice microstepping value
-    self.set_microsteps(DEFAULT_MICROSTEPPING_VALUE)
-
   def send262(self, datagram):
     """
     send register settings to the stepper driver via SPI
@@ -173,9 +149,9 @@ class TMC26XStepper:
     """
     # Send datagram to driver
     msg = [ ((datagram >> 16) & 0xff), ((datagram >>  8) & 0xff), ((datagram) & 0xff) ]
-    print('send262  >> ', tobin(datagram, 20))
+    log.debug('send262  >> %s', tobin(datagram, 20))
     out = self.spi.transfer(msg)
-    print('send262 <<  ', tobin(out[0], 20))
+    log.debug('send262 <<  %s', tobin(out[0], 20))
 
     # Process and save the response
     response = out[0]
@@ -189,21 +165,281 @@ class TMC26XStepper:
     return out
 
   #
-  # Initialization methods
+  # Driver API
   #
 
   def start(self):
+    # set the current
+    self.set_current(self.current)
+    # set to a conservative start value
+    self.set_constant_off_time_chopper(7, 54, 13, 12, 1)
+    # set a nice microstepping value
+    self.set_microsteps(DEFAULT_MICROSTEPPING_VALUE)
+
     # Send configuration to the driver chip
     self.send262(self.driver_control_register_value)
     self.send262(self.chopper_config_register)
     self.send262(self.cool_step_register_value)
     self.send262(self.stall_guard2_current_register_value)
     self.send262(self.driver_configuration_register_value)
-
     self.started = True
+    # TODO Below here copied from AccelStepper
+    self._activator.start()
+    self._run_forever_future = asyncio.ensure_future(self.run_forever())
 
-  def unstart(self):
-    self.started = False
+  def enable(self):
+    self.set_enabled(True)
+
+  def disable(self):
+    self.set_enabled(False)
+
+  def is_enabled(self):
+    if self.chopper_config_register & CHOPPER_CONFIG_REGISTER['T_OFF_PATTERN']:
+      return True
+    else:
+      return False
+
+  def set_target_speed(self, speed):
+    """
+    Set our requested ultimate cruising speed.
+
+    Arguments:
+      speed (float): Steps per second
+    """
+    self._profile.set_target_speed(speed)
+
+  def set_pulse_width(self, pulse_width_us):
+    """
+    Set the step pulse width in microseconds.
+    """
+    # self._pulse_width_us = pulse_width_us
+    self._activator.set_pulse_width(pulse_width_us)
+
+  def step(self, direction):
+    """
+    TODO copied from AccelStepper
+    """
+    self._activator.step(self._profile._direction)
+
+  async def run_forever(self):
+    """
+    Continuously call run() as fast as possible.
+
+    TODO Copied from AccelStepper
+    """
+    while True:
+      await self.run()
+      # Without this await, we never yield back to the event loop
+      await asyncio.sleep(0)
+
+  async def run_until_done(self):
+    """
+    Blockingly calls run() until is_move == False
+    """
+    while self.is_moving:
+      await self.run()
+      await asyncio.sleep(0)
+
+  async def run(self):
+    """
+    Run the motor to implement speed and acceleration in order to proceed to the target position
+    You must call this at least once per step, preferably in your main loop
+    If the motor is in the desired position, the cost is very small
+    returns true if the motor is still running to the target position.
+
+    TODO Copied from AccelStepper
+    """
+    if await self.run_at_speed():
+      self._profile.compute_new_speed()
+    return self.is_moving
+
+  async def run_at_speed(self):
+    """
+    Move 1 step if it is time for another step. Otherwise, do nothing.
+    Pulse duty cycle is apparently undefined. Pulse ends as quickly as possible.
+    Returns -1 if a step occured, 0 otherwise.
+
+    TODO functionally the same as AccelStepper
+    """
+    # log.debug('run_at_speed _step_interval_us=%s distance_to_go=%s',
+    #  self._profile._step_interval_us, self._profile.distance_to_go)
+
+    # Dont do anything unless we actually have a step interval
+    # Dont do anything unless we have somewhere to go
+    if not self._profile._step_interval_us or not self._profile.distance_to_go:
+      return False
+
+    current_time_us = micros()
+
+    next_step_time_us = self._last_step_time_us + self._profile._step_interval_us
+    # move only if the appropriate delay has passed:
+    if current_time_us >= next_step_time_us:
+      # Its time to take a step
+      log.debug('Should step current_time_us=%s next_step_time_us=%s step_interval_us=%s direction=%s',
+        current_time_us, next_step_time_us, self._profile._step_interval_us, self._profile._direction)
+
+      # decrement the steps left:
+      # self.distance_to_go = self.distance_to_go - 1
+      if self._profile._direction == DIRECTION_CW:
+        # Clockwise
+        self._profile._current_steps += 1
+      else:
+        # Anticlockwise
+        self._profile._current_steps -= 1
+
+      # step forward or back, depending on direction:
+      #if self._direction == DIRECTION_CW:
+      #  GPIO.output(self.step_pin, GPIO.HIGH)
+      #else:
+      #  GPIO.output(self.dir_pin, GPIO.HIGH)
+      #  GPIO.output(self.step_pin, GPIO.HIGH)
+      self.step(self._profile._direction)
+
+      # get the timeStamp of when you stepped:
+      self._last_step_time_us = current_time_us
+      self._next_step_time_us = current_time_us + self._profile._step_interval_us
+
+      # disable the step & dir pins
+      # GPIO.output(self.step_pin, GPIO.LOW);
+      # GPIO.output(self.dir_pin, GPIO.LOW);
+      return True
+    else:
+      # No step necessary at this time
+      return False
+
+  async def wait_on_move(self):
+    """
+    'blocks' until is_moving == False.
+    Only use this method if you know there are no other calls to move() happening,
+    or this method may never return. For example: during calibration at startup.
+
+    TODO copied from AccelStepper
+    """
+    log.debug('wait_on_move is_moving=%s', self.is_moving)
+    while self.is_moving:
+      await asyncio.sleep(0)
+
+  def move(self, relative_steps):
+    """
+    Schedules move to a number of steps relative to the current step count.
+    TODO copied from AccelStepper
+    """
+    move_to_steps = self._profile._current_steps + relative_steps
+    log.debug('Moving %s relative steps from %s to %s',
+      relative_steps, self._profile._current_steps, move_to_steps)
+    self.move_to(move_to_steps)
+
+  def move_to(self, absolute_steps):
+    """
+    Schedules move to an absolute number of steps.
+
+    TODO copied from AccelStepper
+    """
+    if self._profile._target_steps != absolute_steps:
+      self._profile._previous_target_steps = self._profile._target_steps
+      self._profile._target_steps = absolute_steps
+      self._profile.compute_new_speed()
+
+  @property
+  def is_moving(self):
+    return self._profile.distance_to_go != 0
+
+  def stop(self):
+    # note to self if the motor is currently moving
+    # stop the motor
+    self.distance_to_go = 0
+    self._profile._direction = 0
+    # return if it was moving
+    return self.is_moving
+
+  def reset_step_counter(self):
+    """
+    TODO copied from AccelStepper
+    """
+    self.set_current_position(0)
+
+  def set_current_position(self, position):
+    """
+    Useful during initialisations or after initial positioning
+    Sets speed to 0
+
+    TODO copied from AccelStepper
+    """
+    self._profile.set_current_position(position)
+
+  def set_microsteps(self, microsteps):
+    setting_pattern = 0
+    # poor mans log
+    if microsteps >= 256:
+      setting_pattern = 0
+      self.microsteps = 256
+    elif microsteps >= 128:
+      setting_pattern = 1
+      self.microsteps = 128
+    elif microsteps >= 64:
+      setting_pattern = 2
+      self.microsteps = 64
+    elif microsteps >= 32:
+      setting_pattern = 3
+      self.microsteps = 32
+    elif microsteps>=16:
+      setting_pattern = 4
+      self.microsteps = 16
+    elif microsteps >= 8:
+      setting_pattern = 5
+      self.microsteps = 8
+    elif microsteps >= 4:
+      setting_pattern = 6
+      self.microsteps = 4
+    elif microsteps >= 2:
+      setting_pattern = 7
+      self.microsteps = 2
+      # 1 and 0 lead to full step
+    elif microsteps <= 1:
+      setting_pattern = 8
+      self.microsteps = 1
+
+    # delete the old value
+    self.driver_control_register_value &= 0xFFFF0
+    # set the new value
+    self.driver_control_register_value |= setting_pattern
+
+    # if started we directly send it to the motor
+    if self.started:
+      self.send262(self.driver_control_register_value)
+
+    # recalculate the stepping delay by simply setting the speed again
+    self._profile.compute_new_speed()
+
+  @property
+  def position(self):
+    """
+    TODO copied from AccelStepper
+    """
+    return self._profile._current_steps
+
+  @property
+  def direction(self):
+    """
+    TODO copied from AccelStepper
+    """
+    return self._profile._direction
+
+  def predict_direction(self, target_steps):
+    """
+    TODO copied from AccelStepper
+    """
+    return DIRECTION_CW if self.predict_distance_to_go(target_steps) > 0 else DIRECTION_CCW
+
+  def predict_distance_to_go(self, target_steps):
+    """
+    TODO copied from AccelStepper
+    """
+    return target_steps - self._profile._current_steps
+
+  #
+  # Configuration / setter methods
+  #
 
   def set_enabled(self, enabled):
     # delete the t_off in the chopper config to get sure
@@ -215,27 +451,16 @@ class TMC26XStepper:
     if self.started:
       self.send262(self.chopper_config_register)
 
-  def is_enabled(self):
-    if self.chopper_config_register & CHOPPER_CONFIG_REGISTER['T_OFF_PATTERN']:
-      return True
-    else:
-      return False
-
-  #
-  # Configuration / setter methods
-  #
-
   def set_current(self, current_ma):
     """
     current_ma: current in milliamps
     """
+    self.current = current_ma
     current_scaling = 0
 
     resistor_value = self.resistor
     # remove vesense flag
-    print('driver_configuration_register_value before ', bin(self.driver_configuration_register_value))
     self.driver_configuration_register_value &= ~ DRIVER_CONTROL_REGISTER['VSENSE']
-    print('driver_configuration_register_value after ', bin(self.driver_configuration_register_value))
 
     # This is derrived from I=(cs+1)/32*(Vsense/Rsense)
     # leading to cs = CS = 32*R*I/V (with V = 0,31V oder 0,165V  and I = 1000*current)
@@ -398,126 +623,6 @@ class TMC26XStepper:
       return -1
     else:
       return 0
-
-  def set_microsteps(self, number_of_steps):
-    setting_pattern = 0
-    # poor mans log
-    if number_of_steps >= 256:
-      setting_pattern = 0
-      self.microsteps = 256
-    elif number_of_steps >= 128:
-      setting_pattern = 1
-      self.microsteps = 128
-    elif number_of_steps >= 64:
-      setting_pattern = 2
-      self.microsteps = 64
-    elif number_of_steps >= 32:
-      setting_pattern = 3
-      self.microsteps = 32
-    elif number_of_steps>=16:
-      setting_pattern = 4
-      self.microsteps = 16
-    elif number_of_steps >= 8:
-      setting_pattern = 5
-      self.microsteps = 8
-    elif number_of_steps >= 4:
-      setting_pattern = 6
-      self.microsteps = 4
-    elif number_of_steps >= 2:
-      setting_pattern = 7
-      self.microsteps = 2
-      # 1 and 0 lead to full step
-    elif number_of_steps <= 1:
-      setting_pattern = 8
-      self.microsteps = 1
-
-    # delete the old value
-    self.driver_control_register_value &= 0xFFFF0
-    # set the new value
-    self.driver_control_register_value |= setting_pattern
-
-    # if started we directly send it to the motor
-    if self.started:
-      self.send262(driver_control_register_value)
-
-    # recalculate the stepping delay by simply setting the speed again
-    self.set_speed(self.speed_rpm)
-
-  def set_speed(self, what_speed_rpm):
-    """
-    Sets the speed in revs per minute (RPMs).
-    """
-    self.speed_rpm = what_speed_rpm;
-
-    # Set the time between steps in microsecnds
-    self.step_delay_us = (60 * 1000 * 1000) / ( self.number_of_steps * what_speed_rpm * self.microsteps)
-
-    # update the next step time
-    self.next_step_time_us = self.last_step_time_us + self.step_delay_us
-
-  #
-  # Movement methods
-  #
-
-  def step(self, steps_to_move):
-    """
-    Moves the motor steps_to_move steps.  If the number is negative,
-    the motor moves in the reverse direction.
-    """
-    if self.steps_left == 0:
-      self.steps_left = abs(steps_to_move)  # how many steps to take
-      # determine direction based on whether steps_to_mode is + or -:
-      if steps_to_move > 0:
-        self.direction = 1
-      elif steps_to_move < 0:
-        self.direction = 0
-      return 0
-    else:
-      return -1
-
-  def move(self):
-    """
-    Move 1 step if it is time for another step. Otherwise, do nothing.
-    Pulse duty cycle is apparently undefined. Pulse ends as quickly as possible.
-    Returns -1 if a step occured, 0 otherwise.
-    """
-    # decrement the number of steps, moving one step each time:
-    if self.steps_left > 0:
-      current_time = micros();
-      # move only if the appropriate delay has passed:
-      if current_time >= self.next_step_time_us:
-
-        # step forward or back, depending on direction:
-        if self.direction == 1:
-          GPIO.output(self.step_pin, GPIO.HIGH)
-        else:
-          GPIO.output(self.dir_pin, GPIO.HIGH)
-          GPIO.output(self.step_pin, GPIO.HIGH)
-
-        # get the timeStamp of when you stepped:
-        self.last_step_time_us = current_time
-        self.next_step_time_us = current_time + self.step_delay_us
-
-        # decrement the steps left:
-        self.steps_left = self.steps_left - 1
-
-        # disable the step & dir pins
-        GPIO.output(self.step_pin, GPIO.LOW);
-        GPIO.output(self.dir_pin, GPIO.LOW);
-      return -1
-    return 0
-
-  def is_moving(self):
-    return self.steps_left > 0
-
-  def stop(self):
-    # note to self if the motor is currently moving
-    state = self.is_moving()
-    # stop the motor
-    self.steps_left = 0
-    self.direction = 0
-    # return if it was moving
-    return state
 
   #
   # Status methods

@@ -7,8 +7,10 @@ class RampProfile:
 
   def __init__(self):
     # Current velocity/speed in steps per second
+    # Generally: 1000000.0 / _step_interval_us
     self._current_speed = 0.0
-    #  Max velocity/speed in steps per second
+    # Max velocity/speed in steps per second
+    # Defaults to 1 to avoid ZeroDivisionError
     self._target_speed = 1.0
     # Number of microseconds between steps
     self._step_interval_us = 0
@@ -46,8 +48,8 @@ class RampProfile:
   def compute_new_speed(self):
     """
     Responsible for calculating the following values.
-      _step_interval_us:
-      _current_speed:
+      _step_interval_us
+      _current_speed
     """
     pass
 
@@ -75,3 +77,6 @@ class RampProfile:
     Value can be speed or steps to go
     """
     return DIRECTION_CW if (value > 0.0) else DIRECTION_CCW
+
+  def _current_direction(self):
+    return DIRECTION_CW if self.distance_to_go > 0 else DIRECTION_CCW
