@@ -50,3 +50,20 @@ Based on the Arduino TMC26X Stepper Motor Controller Library
   # driver current = 300 milliamps
   driver = tmc26x.TMC26XStepper(spi_dev, 200, 23, 18, 300)
   driver.start()
+
+## References
+
+Arduino library for A4988, DRV8825, DRV8834 and generic two-pin (DIR/STEP) stepper motor drivers
+  https://github.com/laurb9/StepperDriver
+
+TMC260 / TMC260A & TMC261 DATASHEET
+  http://www.trinamic.com/fileadmin/assets/Products/ICs_Documents/TMC261_datasheet.pdf
+
+TMC262 DATASHEET
+  http://www.microsemi.com/document-portal/doc_view/130727-trinamic-tmc262-stepper-motor-driver-datasheet
+
+TMC4210+TMC2660 EVALUATION BOARD MANUAL
+  http://www.trinamic.com/fileadmin/assets/Products/Eval_Documents/TMC4210_TMC2660_Eval_Manual.pdf
+
+Arduino TMC26X Stepper Motor Controller Library
+  https://github.com/trinamic/TMC26XStepper
