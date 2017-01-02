@@ -174,7 +174,7 @@ class TMC26XStepper:
     # set to a conservative start value
     self.set_constant_off_time_chopper(7, 54, 13, 12, 1)
     # set a nice microstepping value
-    self.set_microsteps(DEFAULT_MICROSTEPPING_VALUE)
+    self.set_microsteps(self.microsteps)
 
     # Send configuration to the driver chip
     self.send262(self.driver_control_register_value)
@@ -186,6 +186,9 @@ class TMC26XStepper:
     # TODO Below here copied from AccelStepper
     self._activator.start()
     self._run_forever_future = asyncio.ensure_future(self.run_forever())
+
+  def shutdown(self):
+    self.disable()
 
   def enable(self):
     self.set_enabled(True)
@@ -336,12 +339,14 @@ class TMC26XStepper:
     return self._profile.distance_to_go
 
   def stop(self):
-    # note to self if the motor is currently moving
-    # stop the motor
-    self.distance_to_go = 0
-    self._profile._direction = 0
-    # return if it was moving
-    return self.is_moving
+    self.abort()
+    self.disable()
+
+  def abort(self):
+    """
+    TODO copied from AccelStepper
+    """
+    self.set_current_position(self._profile._current_steps)
 
   def reset_step_counter(self):
     """

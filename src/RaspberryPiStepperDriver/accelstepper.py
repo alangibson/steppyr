@@ -172,8 +172,11 @@ class AccelStepper:
     # self.enable()
     self._activator.start()
     self._run_forever_future = asyncio.ensure_future(self.run_forever())
-
+    
   def stop(self):
+    """
+    Shutdown the stepper, driver chip, etc.
+    """
     self._run_forever_future.cancel()
 
   def predict_distance_to_go(self, target_steps):
