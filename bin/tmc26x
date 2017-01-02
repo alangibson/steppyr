@@ -15,7 +15,9 @@ echo
 echo "Example usage"
 echo
 echo "  driver.set_target_speed(100)"
-echo "  driver.move_to(100)"
+echo "  driver.set_microsteps(1)"
+echo "  driver.set_current(1000)"
+echo "  driver.move(100)"
 echo "  loop.run_until_complete(driver.run_until_done())"
 echo
 
