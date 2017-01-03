@@ -1,10 +1,11 @@
 import logging
 import RPi.GPIO as GPIO
 from .. import DIRECTION_CW, DIRECTION_CCW, sleep_microseconds
+from . import Activator
 
 log = logging.getLogger(__name__)
 
-class StepDirActivator:
+class StepDirActivator(Activator):
 
   def __init__(self, dir_pin, step_pin, enable_pin=None, pin_mode=GPIO.BCM):
     # Minimum stepper driver pulse width in microseconds.
@@ -18,16 +19,6 @@ class StepDirActivator:
     self._pin_mode = pin_mode
 
     self._direction = None
-
-  @property
-  def pulse_width(self):
-    return self._pulse_width_us
-
-  def set_pulse_width(self, pulse_width_us):
-    """
-    Set the step pulse width in microseconds.
-    """
-    self._pulse_width_us = pulse_width_us
 
   def enable(self):
     if self._enable_pin:
@@ -55,3 +46,17 @@ class StepDirActivator:
     # Delay the minimum allowed pulse width
     sleep_microseconds(self._pulse_width_us)
     GPIO.output(self._step_pin, GPIO.LOW)
+
+  #
+  # Non-API methods
+  #
+
+  @property
+  def pulse_width(self):
+    return self._pulse_width_us
+
+  def set_pulse_width(self, pulse_width_us):
+    """
+    Set the step pulse width in microseconds.
+    """
+    self._pulse_width_us = pulse_width_us

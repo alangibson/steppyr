@@ -1,20 +1,10 @@
-import RPi.GPIO as GPIO
 import time
+import RPi.GPIO as GPIO
+from .. import DIRECTION_CW, DIRECTION_CCW
+from . import Activator
 
-class Adafruit350ma:
-  
-  enable_pin = 16
-  enable2_pin = 12
-  in1_pin = 18
-  in2_pin = 22
-  in3_pin = 24
-  in4_pin = 26
+class HBridgeActivator(Activator):
 
-  steps_per_second = 600
-  delay = 1.0 / steps_per_second / 4
-  print(delay)
-  # delay = 0.00055
- 
   forward_full_steps = [
     {in1_pin: GPIO.HIGH, in2_pin: GPIO.LOW, in3_pin: GPIO.LOW, in4_pin: GPIO.HIGH},
     {in1_pin: GPIO.LOW, in2_pin: GPIO.HIGH, in3_pin: GPIO.LOW, in4_pin: GPIO.HIGH},
@@ -30,7 +20,17 @@ class Adafruit350ma:
   ]
 
   def __init__(self):
-    GPIO.cleanup() 
+    self.enable_pin = 16
+    self.enable2_pin = 12
+    self.in1_pin = 18
+    self.in2_pin = 22
+    self.in3_pin = 24
+    self.in4_pin = 26
+    self.steps_per_second = 600
+    self.delay = 1.0 / self.steps_per_second / 4
+
+  def start(self):
+    GPIO.cleanup()
     GPIO.setmode(GPIO.BOARD)
     GPIO.setup(self.enable_pin, GPIO.OUT)
     GPIO.setup(self.enable2_pin, GPIO.OUT)
@@ -38,6 +38,23 @@ class Adafruit350ma:
     GPIO.setup(self.in2_pin, GPIO.OUT)
     GPIO.setup(self.in3_pin, GPIO.OUT)
     GPIO.setup(self.in4_pin, GPIO.OUT)
+    self.enable()
+
+  def stop(self):
+    self.disable()
+    GPIO.cleanup()
+
+  def enable(self):
+    GPIO.output(self.enable_pin, GPIO.HIGH)
+    GPIO.output(self.enable2_pin, GPIO.HIGH)
+
+  def disable(self):
+    GPIO.output(self.enable_pin, GPIO.LOW)
+    GPIO.output(self.enable2_pin, GPIO.LOW)
+
+  #
+  # Non-API methods
+  #
 
   def forward(self):
     """
@@ -55,25 +72,20 @@ class Adafruit350ma:
         GPIO.output(key, value)
         time.sleep(self.delay)
 
-  def enable(self):
-    GPIO.output(self.enable_pin, GPIO.HIGH)
-    GPIO.output(self.enable2_pin, GPIO.HIGH)
-
-stepper = Adafruit350ma()
-
-try:
-  stepper.enable()
-  while True:
-    cmd = raw_input("Command, f or r:")
-    direction = cmd[0]
-    if direction == "f":
-      while True:
-        stepper.forward()
-    else: 
-      while True:
-        stepper.reverse()
-except Exception as e:
-  print(e)
-finally:
-  GPIO.cleanup() 
-
+def main():
+  stepper = Adafruit350ma()
+  try:
+    stepper.enable()
+    while True:
+      cmd = raw_input("Command, f or r:")
+      direction = cmd[0]
+      if direction == "f":
+        while True:
+          stepper.forward()
+      else:
+        while True:
+          stepper.reverse()
+  except Exception as e:
+    print(e)
+  finally:
+    GPIO.cleanup()
