@@ -1,5 +1,5 @@
 import asyncio, logging, time
-from . import DIRECTION_CW, DIRECTION_CCW, micros
+from . import DIRECTION_CW, DIRECTION_CCW, micros, Stepper
 from .activators import stepdir as stepdir_act
 """
 Ported to python from https://github.com/trinamic/TMC26XStepper
@@ -110,7 +110,7 @@ INITIAL_MICROSTEPPING = MICROSTEP_RESOLUTION[32]
 
 tobin = lambda x, n: format(x, 'b').ljust(n, '0')
 
-class TMC26XStepper:
+class TMC26XStepper(Stepper):
   """
   Arguments
     dir_pin - the pin where the direction pin is connected
@@ -187,181 +187,39 @@ class TMC26XStepper:
     self._activator.start()
     self._run_forever_future = asyncio.ensure_future(self.run_forever())
 
-  def shutdown(self):
+  def stop(self):
+    self.abort()
     self.disable()
 
   def enable(self):
+    """ Enable hardware (possibly temporarily) """
     self.set_enabled(True)
 
   def disable(self):
+    """ Disable hardware (possibly temporarily) """
     self.set_enabled(False)
 
   def is_enabled(self):
+    """ Returns true if hardware is enabled, False otherwise """
     if self.chopper_config_register & CHOPPER_CONFIG_REGISTER['T_OFF_PATTERN']:
       return True
     else:
       return False
 
-  def set_target_speed(self, speed):
-    """
-    Set our requested ultimate cruising speed.
+  def set_enabled(self, enabled):
+    """ Does the work of enabling or disabling the hardware """
+    # delete the t_off in the chopper config to get sure
+    self.chopper_config_register = unset_bit(self.chopper_config_register, CHOPPER_CONFIG_REGISTER['T_OFF_PATTERN'])
+    if enabled:
+      # and set the t_off time
+      self.chopper_config_register = set_bit(self.chopper_config_register, self.constant_off_time)
+    # if not enabled we don't have to do anything since we already delete t_off from the register
+    if self.started:
+      self.send262(self.chopper_config_register)
 
-    Arguments:
-      speed (float): Steps per second
-    """
-    self._profile.set_target_speed(speed)
-
-  def set_pulse_width(self, pulse_width_us):
-    """
-    Set the step pulse width in microseconds.
-    """
-    # self._pulse_width_us = pulse_width_us
-    self._activator.set_pulse_width(pulse_width_us)
-
-  def step(self, direction):
-    """
-    TODO copied from AccelStepper
-    """
-    self._activator.step(self._profile._direction)
-
-  async def run_forever(self):
-    """
-    Continuously call run() as fast as possible.
-
-    TODO Copied from AccelStepper
-    """
-    while True:
-      await self.run()
-      # Without this await, we never yield back to the event loop
-      await asyncio.sleep(0)
-
-  async def run_until_done(self):
-    """
-    Blockingly calls run() until is_move == False
-    """
-    while self.is_moving:
-      await self.run()
-      await asyncio.sleep(0)
-
-  async def run(self):
-    """
-    Run the motor to implement speed and acceleration in order to proceed to the target position
-    You must call this at least once per step, preferably in your main loop
-    If the motor is in the desired position, the cost is very small
-    returns true if the motor is still running to the target position.
-
-    TODO Copied from AccelStepper
-    """
-    if await self.run_at_speed():
-      self._profile.compute_new_speed()
-    return self.is_moving
-
-  async def run_at_speed(self):
-    """
-    Move 1 step if it is time for another step. Otherwise, do nothing.
-    Pulse duty cycle is apparently undefined. Pulse ends as quickly as possible.
-    Returns -1 if a step occured, 0 otherwise.
-
-    TODO functionally the same as AccelStepper
-    """
-    # Dont do anything unless we actually have a step interval
-    # Dont do anything unless we have somewhere to go
-    if not self._profile._step_interval_us or not self._profile.distance_to_go:
-      return False
-
-    current_time_us = micros()
-
-    next_step_time_us = self._last_step_time_us + self._profile._step_interval_us
-    # move only if the appropriate delay has passed:
-    if current_time_us >= next_step_time_us:
-      # Its time to take a step
-      log.debug('Should step current_time_us=%s next_step_time_us=%s step_interval_us=%s direction=%s',
-        current_time_us, next_step_time_us, self._profile._step_interval_us, self._profile._direction)
-
-      # decrement the steps left:
-      if self._profile._direction == DIRECTION_CW:
-        # Clockwise
-        self._profile._current_steps += 1
-      else:
-        # Anticlockwise
-        self._profile._current_steps -= 1
-
-      # step forward or back, depending on direction:
-      self.step(self._profile._direction)
-
-      # get the timeStamp of when you stepped:
-      self._last_step_time_us = current_time_us
-      self._next_step_time_us = current_time_us + self._profile._step_interval_us
-      return True
-    else:
-      # No step necessary at this time
-      return False
-
-  async def wait_on_move(self):
-    """
-    'blocks' until is_moving == False.
-    Only use this method if you know there are no other calls to move() happening,
-    or this method may never return. For example: during calibration at startup.
-
-    TODO copied from AccelStepper
-    """
-    log.debug('wait_on_move is_moving=%s', self.is_moving)
-    while self.is_moving:
-      await asyncio.sleep(0)
-
-  def move(self, relative_steps):
-    """
-    Schedules move to a number of steps relative to the current step count.
-    TODO copied from AccelStepper
-    """
-    move_to_steps = self._profile._current_steps + relative_steps
-    log.debug('Moving %s relative steps from %s to %s',
-      relative_steps, self._profile._current_steps, move_to_steps)
-    self.move_to(move_to_steps)
-
-  def move_to(self, absolute_steps):
-    """
-    Schedules move to an absolute number of steps.
-
-    TODO copied from AccelStepper
-    """
-    if self._profile._target_steps != absolute_steps:
-      self._profile._previous_target_steps = self._profile._target_steps
-      self._profile._target_steps = absolute_steps
-      self._profile.compute_new_speed()
-
-  @property
-  def is_moving(self):
-    return self._profile.distance_to_go != 0
-
-  @property
-  def distance_to_go(self):
-    return self._profile.distance_to_go
-
-  def stop(self):
-    self.abort()
-    self.disable()
-
-  def abort(self):
-    """
-    TODO copied from AccelStepper
-    """
-    self.set_current_position(self._profile._current_steps)
-
-  def reset_step_counter(self):
-    """
-    TODO copied from AccelStepper
-    """
-    self.set_current_position(0)
-
-  def set_current_position(self, position):
-    """
-    Useful during initialisations or after initial positioning
-    Sets speed to 0
-
-    TODO copied from AccelStepper
-    """
-    self._profile.set_current_position(position)
+  #
+  # TMC26X Configuration / setter methods
+  #
 
   def set_microsteps(self, microsteps):
     setting_pattern = 0
@@ -406,46 +264,6 @@ class TMC26XStepper:
 
     # recalculate the stepping delay by simply setting the speed again
     self._profile.compute_new_speed()
-
-  @property
-  def position(self):
-    """
-    TODO copied from AccelStepper
-    """
-    return self._profile._current_steps
-
-  @property
-  def direction(self):
-    """
-    TODO copied from AccelStepper
-    """
-    return self._profile._direction
-
-  def predict_direction(self, target_steps):
-    """
-    TODO copied from AccelStepper
-    """
-    return DIRECTION_CW if self.predict_distance_to_go(target_steps) > 0 else DIRECTION_CCW
-
-  def predict_distance_to_go(self, target_steps):
-    """
-    TODO copied from AccelStepper
-    """
-    return target_steps - self._profile._current_steps
-
-  #
-  # Configuration / setter methods
-  #
-
-  def set_enabled(self, enabled):
-    # delete the t_off in the chopper config to get sure
-    self.chopper_config_register = unset_bit(self.chopper_config_register, CHOPPER_CONFIG_REGISTER['T_OFF_PATTERN'])
-    if enabled:
-      # and set the t_off time
-      self.chopper_config_register = set_bit(self.chopper_config_register, self.constant_off_time)
-    # if not enabled we don't have to do anything since we already delete t_off from the register
-    if self.started:
-      self.send262(self.chopper_config_register)
 
   def set_current(self, current_ma):
     """
@@ -640,7 +458,7 @@ class TMC26XStepper:
       return False
 
   #
-  # Status methods
+  # TMC26X Status methods
   #
 
   def read_status(self, read_value=None):
@@ -791,11 +609,13 @@ class TMC26XStepper:
       return False
 
 def unset_bit(value, mask):
+  """ Convenience function to unset bits based on a mask """
   new_value = value & ~ mask
   log.debug('unsetting bit(s) %s %s -> %s', bin(value), bin(mask), bin(new_value))
   return new_value
 
 def set_bit(value, mask):
+  """ Convenience function to set bits based on a mask """
   new_value = value | mask
   log.debug('setting bit(s) %s %s -> %s', bin(value), bin(mask), bin(new_value))
   return new_value
