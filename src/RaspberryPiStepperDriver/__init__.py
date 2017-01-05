@@ -45,8 +45,6 @@ class Stepper:
     TODO copied from AccelStepper
     """
     move_to_steps = self._profile._current_steps + relative_steps
-    log.debug('Moving %s relative steps from %s to %s',
-      relative_steps, self._profile._current_steps, move_to_steps)
     self.move_to(move_to_steps)
 
   def move_to(self, absolute_steps):
@@ -57,6 +55,12 @@ class Stepper:
       self._profile._previous_target_steps = self._profile._target_steps
       self._profile._target_steps = absolute_steps
       self._profile.compute_new_speed()
+
+  def rotate(self, degrees):
+    """
+    Rotate motor a given number of degrees.
+    """
+    self.move(calc_degrees_to_steps(degrees, self._profile._motor_steps_per_rev, self._profile._microsteps))
 
   @property
   def is_moving(self):
@@ -200,3 +204,6 @@ class Stepper:
     Set the step pulse width in microseconds.
     """
     self._activator.set_pulse_width(pulse_width_us)
+
+def calc_degrees_to_steps(degrees, motor_steps_per_rev, microsteps):
+  return degrees * motor_steps_per_rev * microsteps / 360
