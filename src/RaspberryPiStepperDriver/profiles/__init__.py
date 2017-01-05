@@ -1,4 +1,7 @@
+import logging
 from .. import DIRECTION_CW, DIRECTION_CCW
+
+log = logging.getLogger(__name__)
 
 class RampProfile:
 
