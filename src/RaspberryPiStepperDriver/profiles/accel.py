@@ -11,9 +11,6 @@ class AccelProfile(RampProfile):
 
   def __init__(self):
     super().__init__()
-
-    # Acceleration in steps per second per second
-    # self._acceleration = 0.0
     # Precomputed sqrt(2*_acceleration)
     self._sqrt_twoa = 1.0
     # Used for calculating acceleration
@@ -37,6 +34,7 @@ class AccelProfile(RampProfile):
     if self._target_speed == speed:
       return
     self._target_speed = speed
+    # TODO can we move the following block into compute_new_speed() ?
     self._ramp_delay_min_us = 1000000.0 / speed
     # Recompute _ramp_step_number from current speed and adjust speed if accelerating or cruising
     if (self._ramp_step_number > 0):
@@ -118,10 +116,5 @@ class AccelProfile(RampProfile):
       self._ramp_step_number, self._current_speed, self._step_interval_us)
 
   def set_current_position(self, position):
-    """
-    Useful during initialisations or after initial positioning
-    """
-    self._target_steps = self._current_steps = position
+    super().set_current_position(position)
     self._ramp_step_number = 0
-    self._step_interval_us = 0
-    self._current_speed = 0.0

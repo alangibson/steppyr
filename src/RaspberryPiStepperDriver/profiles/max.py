@@ -9,7 +9,6 @@ def constrain(value, minn, maxn):
 class MaxProfile(RampProfile):
   def __init__(self, acceleration_steps=0, max_start_speed=0.0):
     super().__init__()
-
     self._last_direction = DIRECTION_CCW
     # Number of steps to take to go from min start speed to target speed
     self._acceleration_steps = acceleration_steps
@@ -17,26 +16,7 @@ class MaxProfile(RampProfile):
     self._max_start_speed = max_start_speed
     self._deceleration_steps = 5
 
-  def set_target_speed(self, speed):
-    """
-    Set our requested ultimate cruising speed.
-
-    Arguments:
-      speed (float): Steps per second
-    """
-    if speed == self._target_speed:
-      return
-    self._target_speed = speed
-    self.compute_new_speed()
-    log.debug('Set speed %s _step_interval_us %s _direction %s',
-      speed, self._step_interval_us, self._direction )
-    return speed
-
-  def set_acceleration(self, acceleration):
-    pass
-
   def compute_new_speed(self):
-
     # Determine direction
     # HACK don't change anything if distance = 0 because we get a default value from calc_direction()
     if self.distance_to_go == 0:
@@ -99,6 +79,3 @@ class MaxProfile(RampProfile):
     #log.debug('_acceleration_increment %s _deceleration_increment %s _adjusted_deceleration_steps %s',
     #  _acceleration_increment,_deceleration_increment, _adjusted_deceleration_steps)
     # log.debug('_steps_being_moved %s _adjusted_deceleration_steps %s', _steps_being_moved, _adjusted_deceleration_steps)
-
-  def set_current_position(self, position):
-    self._target_steps = self._current_steps = position

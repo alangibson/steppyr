@@ -9,22 +9,6 @@ class RectangleProfile(RampProfile):
   def __init__(self):
     super().__init__()
 
-  def set_target_speed(self, speed):
-    """
-    Set our requested ultimate cruising speed.
-
-    Arguments:
-      speed (float): Steps per second
-    """
-    if self._target_speed == speed:
-      return
-    self._target_speed = speed
-    self.compute_new_speed()
-
-  def set_acceleration(self, acceleration):
-    # NOOP for rectangle profile. Just recompute new speed.
-    self.compute_new_speed()
-
   def compute_new_speed(self):
     # This is the original rpm based way
     # us_per_min = 60 * 1000000
@@ -36,7 +20,18 @@ class RectangleProfile(RampProfile):
     self._current_speed = 1000000.0 / self._step_interval_us
     self._direction = self._current_direction()
 
-  def set_current_position(self, position):
-    self._target_steps = self._current_steps = position
-    self._step_interval_us = 0
-    self._current_speed = 0.0
+  """
+  TODO implment this rpm based way also
+  def _calc_step_pulse_us(self):
+    "
+    Calculate the step pulse in microseconds for a given rpm value.
+    60[s/min] * 1000000[us/s] / microsteps / steps / rpm
+    "
+    if self.motor_steps and self.microsteps and self.rpm:
+      self.step_pulse_us = 60 * 1000000 / self.motor_steps / self.microsteps / self.rpm
+      log.debug('base.StepperDriver calculated step pulse %s us, motor_steps %s, microsteps %s, rpm %s',
+        self.step_pulse_us, self.motor_steps, self.microsteps, self.rpm)
+      # We currently try to do a 50% duty cycle so it's easy to see.
+      # Other option is step_high_min, pulse_duration-step_high_min.
+      self.pulse_duration_us = self.step_pulse_us / 2
+  """
