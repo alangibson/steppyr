@@ -1,11 +1,11 @@
-from RaspberryPiStepperDriver import stepdir
+from RaspberryPiStepperDriver.deprecated import stepdir
 import RPi.GPIO as GPIO
 
 class A4988(stepdir.StepperDriver):
-  """
-  The A4988 provides a STEP/DIR interface and allows setting microstep
-  resolution with the ms* pins.
-  """
+    """
+    The A4988 provides a STEP/DIR interface and allows setting microstep
+    resolution with the ms* pins.
+    """
 
     microstep_table = {
         0: int('000', 2),

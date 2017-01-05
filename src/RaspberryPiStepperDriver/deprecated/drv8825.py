@@ -1,4 +1,4 @@
-from RaspberryPiStepperDriver import a4988
+from RaspberryPiStepperDriver.deprecated import a4988
 
 class DRV8825(a4988.A4988):
     """
