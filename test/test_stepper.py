@@ -1,4 +1,4 @@
-from RaspberryPiStepperDriver import calc_degrees_to_steps
+from RaspberryPiStepperDriver.drivers import calc_degrees_to_steps
 
 def test_calc_degrees_to_steps():
   # given

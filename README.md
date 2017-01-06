@@ -6,23 +6,24 @@ Python Raspberry Pi library for the STEP/DIR stepper drivers.
 
 For a TMC26X driver.
 
-    from RaspberryPiStepperDriver import spi, tmc26x
-    from RaspberryPiStepperDriver.profiles import rectangle as rectangle_profile
+    from RaspberryPiStepperDriver.accelstepper import AccelStepper
+    from RaspberryPiStepperDriver.activators.spi import SPI
+    from RaspberryPiStepperDriver.activators.tmc26x import TMC26XActivator
+    from RaspberryPiStepperDriver.profiles.rectangle import RectangleProfile
 
-    stepper_profile = rectangle_profile.RectangleProfile()
-
-    spi_dev = spi.SPI(bus=0, device=0)
-
-    stepper_driver = tmc26x.TMC26XStepper(
-      profile=stepper_profile,
-      spi=spi_dev,
-      dir_pin=pinout.dir_pin,
-      step_pin=pinout.step_pin,
-      current=300
+    # Create the stepper driver
+    stepper = AccelStepper(
+      profile=RectangleProfile(),
+      activator=TMC26XActivator(
+        spi=SPI(bus=0, device=0),
+        dir_pin=pinout.dir_pin,
+        step_pin=pinout.step_pin,
+        current=300
       )
-    stepper_driver.set_target_speed(1000) # steps per second
-    # stepper_driver.set_acceleration(40000) # steps per second per second
-    # stepper_driver.set_pulse_width(2) # microseconds
+    )
+    stepper.set_target_speed(1000) # steps per second
+    # stepper.set_acceleration(40000) # steps per second per second
+    # stepper.set_pulse_width(2) # microseconds
 
 For all other STEP/DIR drivers.
 

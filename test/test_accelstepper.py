@@ -1,11 +1,15 @@
 import asyncio, logging, time
-from RaspberryPiStepperDriver import accelstepper
+from RaspberryPiStepperDriver import drivers
 from RaspberryPiStepperDriver.profiles import accel
+from RaspberryPiStepperDriver.activators.stepdir import StepDirActivator
 
 logging.basicConfig(level=logging.DEBUG)
 
 # def __init__(self, profile, dir_pin, step_pin, enable_pin=None, pin_mode=GPIO.BCM):
-stepper = accelstepper.AccelStepper(accel.AccelProfile(), 999, 999, 999)
+stepper = drivers.StepperDriver(
+  activator=StepDirActivator(999, 999, 999),
+  profile=accel.AccelProfile()
+)
 stepper.start()
 
 motor_steps_per_rev = 200

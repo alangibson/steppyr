@@ -1,8 +1,9 @@
-import asyncio, logging, time
-from . import DIRECTION_CW, DIRECTION_CCW, micros, Stepper
-from .activators import stepdir as stepdir_act
+import logging
+import RPi.GPIO as GPIO
+from .stepdir import StepDirActivator
+
 """
-Ported to python from https://github.com/trinamic/TMC26XStepper
+Ported to Python from https://github.com/trinamic/TMC26XStepper
 """
 
 log = logging.getLogger(__name__)
@@ -108,26 +109,22 @@ MICROSTEP_RESOLUTION = {
 # default values
 INITIAL_MICROSTEPPING = MICROSTEP_RESOLUTION[32]
 
-tobin = lambda x, n: format(x, 'b').ljust(n, '0')
+class TMC26XActivator(StepDirActivator):
 
-class TMC26XStepper(Stepper):
-  """
-  Arguments
-    dir_pin - the pin where the direction pin is connected
-    step_pin - the pin where the step pin is connected
-    current - chopper current in milliamps
-    resistor - sense resistor value
-  """
-  def __init__(self, spi, profile, dir_pin, step_pin, current, resistor=150):
-    self._profile = profile
-    self._activator = stepdir_act.StepDirActivator(dir_pin, step_pin)
+  def __init__(self, spi, dir_pin, step_pin, pin_mode=GPIO.BCM, current=300, resistor=150):
+    """
+    Arguments
+      dir_pin - the pin where the direction pin is connected
+      step_pin - the pin where the step pin is connected
+      current - chopper current in milliamps
+      resistor - sense resistor value
+    """
+    super().__init__(dir_pin=dir_pin, step_pin=step_pin, pin_mode=pin_mode)
+    self._microsteps = 1
     self.spi = spi
     # store the current and sense resistor value for later use
     self.resistor = resistor
     self.current = current
-    # Both of these are needed to avoid div by 0 error in set_speed
-    # Set a default speed in rpm
-    self._last_step_time_us = micros()
     # we are not started yet
     self.started = False
     # by default cool step is not enabled
@@ -136,11 +133,86 @@ class TMC26XStepper(Stepper):
     self.driver_status_result = None
     # setting the default register values
     self.driver_control_register_value = set_bit(REGISTERS['DRIVER_CONTROL_REGISTER'], INITIAL_MICROSTEPPING)
-    self.microsteps = (1 << INITIAL_MICROSTEPPING)
+    self._microsteps = (1 << INITIAL_MICROSTEPPING)
     self.chopper_config_register = REGISTERS['CHOPPER_CONFIG_REGISTER']
     self.cool_step_register_value = REGISTERS['COOL_STEP_REGISTER']
     self.stall_guard2_current_register_value = REGISTERS['STALL_GUARD2_LOAD_MEASURE_REGISTER']
     self.driver_configuration_register_value = set_bit(REGISTERS['DRIVER_CONFIG_REGISTER'], DRIVER_CONTROL_REGISTER['READ_STALL_GUARD_READING'])
+
+  def start(self):
+    # set the current
+    self.set_current(self.current)
+    # set to a conservative start value
+    self.set_constant_off_time_chopper(7, 54, 13, 12, 1)
+    # set a nice microstepping value
+    self.set_microsteps(self._microsteps)
+    # Send configuration to the driver chip
+    self.send262(self.driver_control_register_value)
+    self.send262(self.chopper_config_register)
+    self.send262(self.cool_step_register_value)
+    self.send262(self.stall_guard2_current_register_value)
+    self.send262(self.driver_configuration_register_value)
+    self.started = True
+
+  def stop(self):
+    self.disable()
+
+  def enable(self):
+    """ Enable hardware (possibly temporarily) """
+    self.set_enabled(True)
+
+  def disable(self):
+    """ Disable hardware (possibly temporarily) """
+    self.set_enabled(False)
+
+  def set_microsteps(self, microsteps):
+    setting_pattern = 0
+    # poor mans log
+    if microsteps >= 256:
+      setting_pattern = 0
+      self._microsteps = 256
+    elif microsteps >= 128:
+      setting_pattern = 1
+      self._microsteps = 128
+    elif microsteps >= 64:
+      setting_pattern = 2
+      self._microsteps = 64
+    elif microsteps >= 32:
+      setting_pattern = 3
+      self._microsteps = 32
+    elif microsteps>=16:
+      setting_pattern = 4
+      self._microsteps = 16
+    elif microsteps >= 8:
+      setting_pattern = 5
+      self._microsteps = 8
+    elif microsteps >= 4:
+      setting_pattern = 6
+      self._microsteps = 4
+    elif microsteps >= 2:
+      setting_pattern = 7
+      self._microsteps = 2
+      # 1 and 0 lead to full step
+    elif microsteps <= 1:
+      setting_pattern = 8
+      self._microsteps = 1
+
+    # delete the old value
+    self.driver_control_register_value &= 0xFFFF0
+    # set the new value
+    self.driver_control_register_value = set_bit(self.driver_control_register_value, setting_pattern)
+
+    # if started we directly send it to the motor
+    if self.started:
+      self.send262(self.driver_control_register_value)
+
+  @property
+  def microsteps(self):
+    return self._microsteps
+
+  #
+  # Non-API methods
+  #
 
   def send262(self, datagram):
     """
@@ -164,41 +236,6 @@ class TMC26XStepper(Stepper):
 
     return out
 
-  #
-  # Driver API
-  #
-
-  def start(self):
-    # set the current
-    self.set_current(self.current)
-    # set to a conservative start value
-    self.set_constant_off_time_chopper(7, 54, 13, 12, 1)
-    # set a nice microstepping value
-    self.set_microsteps(self.microsteps)
-
-    # Send configuration to the driver chip
-    self.send262(self.driver_control_register_value)
-    self.send262(self.chopper_config_register)
-    self.send262(self.cool_step_register_value)
-    self.send262(self.stall_guard2_current_register_value)
-    self.send262(self.driver_configuration_register_value)
-    self.started = True
-    # TODO Below here copied from AccelStepper
-    self._activator.start()
-    self._run_forever_future = asyncio.ensure_future(self.run_forever())
-
-  def stop(self):
-    self.abort()
-    self.disable()
-
-  def enable(self):
-    """ Enable hardware (possibly temporarily) """
-    self.set_enabled(True)
-
-  def disable(self):
-    """ Disable hardware (possibly temporarily) """
-    self.set_enabled(False)
-
   def is_enabled(self):
     """ Returns true if hardware is enabled, False otherwise """
     if self.chopper_config_register & CHOPPER_CONFIG_REGISTER['T_OFF_PATTERN']:
@@ -216,54 +253,6 @@ class TMC26XStepper(Stepper):
     # if not enabled we don't have to do anything since we already delete t_off from the register
     if self.started:
       self.send262(self.chopper_config_register)
-
-  #
-  # TMC26X Configuration / setter methods
-  #
-
-  def set_microsteps(self, microsteps):
-    setting_pattern = 0
-    # poor mans log
-    if microsteps >= 256:
-      setting_pattern = 0
-      self.microsteps = 256
-    elif microsteps >= 128:
-      setting_pattern = 1
-      self.microsteps = 128
-    elif microsteps >= 64:
-      setting_pattern = 2
-      self.microsteps = 64
-    elif microsteps >= 32:
-      setting_pattern = 3
-      self.microsteps = 32
-    elif microsteps>=16:
-      setting_pattern = 4
-      self.microsteps = 16
-    elif microsteps >= 8:
-      setting_pattern = 5
-      self.microsteps = 8
-    elif microsteps >= 4:
-      setting_pattern = 6
-      self.microsteps = 4
-    elif microsteps >= 2:
-      setting_pattern = 7
-      self.microsteps = 2
-      # 1 and 0 lead to full step
-    elif microsteps <= 1:
-      setting_pattern = 8
-      self.microsteps = 1
-
-    # delete the old value
-    self.driver_control_register_value &= 0xFFFF0
-    # set the new value
-    self.driver_control_register_value = set_bit(self.driver_control_register_value, setting_pattern)
-
-    # if started we directly send it to the motor
-    if self.started:
-      self.send262(self.driver_control_register_value)
-
-    # recalculate the stepping delay by simply setting the speed again
-    self._profile.compute_new_speed()
 
   def set_current(self, current_ma):
     """
@@ -457,9 +446,7 @@ class TMC26XStepper(Stepper):
     else:
       return False
 
-  #
   # TMC26X Status methods
-  #
 
   def read_status(self, read_value=None):
     """
@@ -619,3 +606,5 @@ def set_bit(value, mask):
   new_value = value | mask
   log.debug('setting bit(s) %s %s -> %s', bin(value), bin(mask), bin(new_value))
   return new_value
+
+tobin = lambda x, n: format(x, 'b').ljust(n, '0')
