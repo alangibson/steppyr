@@ -153,8 +153,10 @@ class TMC26XActivator(StepDirActivator):
     self.send262(self.stall_guard2_current_register_value)
     self.send262(self.driver_configuration_register_value)
     self.started = True
+    super().start()
 
   def stop(self):
+    super().stop()
     self.disable()
 
   def enable(self):
