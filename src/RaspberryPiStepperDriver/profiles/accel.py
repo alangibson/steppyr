@@ -18,9 +18,11 @@ class AccelProfile(RampProfile):
     # 'n' in the Austin paper
     self._ramp_step_number = 0
     # _timer_count is 'c' in Austin paper
-    self._ramp_delay_0_us = 0.0
+    # Defaults to 1.0 to avoid divide by zero errors
+    self._ramp_delay_0_us = 1.0
     # All timer counts > _ramp_delay_0_us. _timer_count is 'c' in Austin paper
-    self._ramp_delay_n_us = 0.0
+    # Defaults to 1.0 to avoid divide by zero errors
+    self._ramp_delay_n_us = 1.0
     # Minimum microseconds for ramp delay
     self._ramp_delay_min_us = 1.0
 
