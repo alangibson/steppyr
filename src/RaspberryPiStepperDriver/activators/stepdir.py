@@ -28,6 +28,9 @@ class StepDirActivator(Activator):
     GPIO.setup(self._step_pin, GPIO.OUT, initial=GPIO.LOW)
     self.enable()
 
+  def stop(self):
+    self.disable()
+
   def step(self, direction):
     # Set direction first else get rogue pulses
     GPIO.output(self._dir_pin, GPIO.LOW if direction == DIRECTION_CCW else GPIO.HIGH)
