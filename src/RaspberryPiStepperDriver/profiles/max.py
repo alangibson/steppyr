@@ -1,5 +1,6 @@
 import logging
-from . import RampProfile, DIRECTION_CW, DIRECTION_CCW
+from RaspberryPiStepperDriver import DIRECTION_CW, DIRECTION_CCW, DIRECTION_NONE
+from . import RampProfile, calc_direction, calc_step_interval_us
 
 log = logging.getLogger(__name__)
 
@@ -9,7 +10,7 @@ def constrain(value, minn, maxn):
 class MaxProfile(RampProfile):
   def __init__(self, acceleration_steps=0, max_start_speed=0.0):
     super().__init__()
-    self._last_direction = DIRECTION_CCW
+    self._last_direction = DIRECTION_NONE
     # Number of steps to take to go from min start speed to target speed
     self._acceleration_steps = acceleration_steps
     # Max speed that the motor can start at in steps per second
@@ -26,56 +27,89 @@ class MaxProfile(RampProfile):
       return
     else:
       self._last_direction = self._direction
-      self._direction = self.calc_direction(self.distance_to_go)
+      self._direction = calc_direction(self.distance_to_go)
 
     # Make sure accelerate and decelerate ramps don't overlap
-    _steps_being_moved = abs(abs(self._target_steps) - abs(self.parent._previous_target_steps))
-    _adjusted_deceleration_steps = min(self._deceleration_steps, _steps_being_moved - self._acceleration_steps)
+    steps_being_moved = calc_steps_being_moved(self._target_steps, self._previous_target_steps)
+    adjusted_deceleration_steps = min(self._deceleration_steps, steps_being_moved - self._acceleration_steps)
     # HACK fix the math so this conditional is not needed
-    if _adjusted_deceleration_steps <= 0:
-      _adjusted_deceleration_steps = 1
+    #if adjusted_deceleration_steps <= 0:
+    #  adjusted_deceleration_steps = 1
 
     # Calculate the rate in steps at which we should accelerate
-    if self._acceleration_steps <= 0:
-      _acceleration_increment = self._target_speed
-    else:
-      _acceleration_increment = (self._target_speed - self._max_start_speed) / self._acceleration_steps
+    acceleration_increment_steps = calc_acceleration_increment_steps(
+      self._acceleration_steps, self._target_speed, self._max_start_speed)
+
     # Calculate the rate in steps at which we should decelerate
-    if self._deceleration_steps <= 0:
-      _deceleration_increment = self._target_speed
-    else:
-      _deceleration_increment = self._target_speed / _adjusted_deceleration_steps
+    deceleration_increment_steps = calc_deceleration_increment_steps(adjusted_deceleration_steps, self._target_speed)
 
     # Calculations are simpler if we use the absolute value of the current speed
-    _current_speed = abs(self._current_speed)
+    abs_current_speed = abs(self._current_speed)
 
     # Determine our speed
     # If we changed direction, start ramp over
     if self._last_direction != self._direction:
       # This is our first step from stop, which is a special case due to _max_start_speed.
-      _current_speed = self._max_start_speed
-    elif (_steps_being_moved - abs(self.distance_to_go)) <= self._acceleration_steps:
+      abs_current_speed = self._max_start_speed
+    # elif (steps_being_moved - abs(self.distance_to_go)) <= self._acceleration_steps:
+    elif is_accelerating(steps_being_moved, self.distance_to_go, self._acceleration_steps):
+        print('We are accelerating')
         # We are accelerating
-        _current_speed = constrain(_current_speed + _acceleration_increment,
+        print(abs_current_speed, acceleration_increment_steps, self._max_start_speed, self._target_speed)
+        abs_current_speed = constrain(abs_current_speed + acceleration_increment_steps,
           self._max_start_speed, self._target_speed)
-      # else: we are cruising
-    elif abs(self.distance_to_go) < _adjusted_deceleration_steps:
+    # elif abs(self.distance_to_go) < adjusted_deceleration_steps:
+    elif is_decelerating(self.distance_to_go, adjusted_deceleration_steps):
+      print('Start decelerating')
       # We are within _acceleration_steps of the end point. Start decelerating.
-      _current_speed = _current_speed - _deceleration_increment
+      abs_current_speed = abs_current_speed - deceleration_increment_steps
+    else:
+      print('we are cruising')
+      pass
 
     # Adjust for signed-ness direction
     if self._direction == DIRECTION_CCW:
-      _current_speed = -_current_speed
-    self._current_speed = _current_speed
+      abs_current_speed = -abs_current_speed
+    self._current_speed = abs_current_speed
 
     # Calculate the next step interval
-    self._step_interval_us = self.calc_step_interval_us(self._current_speed)
+    self._step_interval_us = calc_step_interval_us(self._current_speed)
 
-    log.debug('Computed new speed. _direction=%s, _current_steps=%s, _target_steps=%s, distance_to_go=%s, _current_speed=%s, _step_interval_us=%s _acceleration_increment=%s _target_speed=%s',
+    log.debug('Computed new speed. _direction=%s, _current_steps=%s, _target_steps=%s, distance_to_go=%s, _current_speed=%s, _step_interval_us=%s acceleration_increment_steps=%s _target_speed=%s',
       self._direction, self._current_steps,
       self._target_steps, self.distance_to_go,
       self._current_speed, self._step_interval_us,
-      _acceleration_increment, self._target_speed)
-    #log.debug('_acceleration_increment %s _deceleration_increment %s _adjusted_deceleration_steps %s',
-    #  _acceleration_increment,_deceleration_increment, _adjusted_deceleration_steps)
-    # log.debug('_steps_being_moved %s _adjusted_deceleration_steps %s', _steps_being_moved, _adjusted_deceleration_steps)
+      acceleration_increment_steps, self._target_speed)
+
+def calc_acceleration_increment_steps(acceleration_steps, target_speed_steps_per_sec, max_start_speed):
+  """ Calculate the rate in steps at which we should accelerate """
+  if acceleration_steps <= 0:
+    # No acceleration steps to take, so just to go max target speed
+    acceleration_increment_steps = target_speed_steps_per_sec
+  else:
+    acceleration_increment_steps = ( target_speed_steps_per_sec - max_start_speed) / acceleration_steps
+  return acceleration_increment_steps
+
+def calc_deceleration_increment_steps(deceleration_steps, target_speed):
+  """ Calculate the rate in steps at which we should decelerate """
+  if deceleration_steps <= 0:
+    # No decceleration steps to take, so just assume max target speed
+    deceleration_increment_steps = target_speed
+  else:
+    deceleration_increment_steps = target_speed / deceleration_steps
+  return deceleration_increment_steps
+
+def calc_steps_being_moved(target_steps, previous_target_steps):
+  """
+  Absolute number of steps being moved. Never negative.
+  """
+  return abs(target_steps- previous_target_steps)
+
+def adjust_deceleration_steps(acceleration_steps, deceleration_steps, steps_being_moved):
+  return min(deceleration_steps, steps_being_moved - acceleration_steps)
+
+def is_accelerating(steps_being_moved, distance_to_go, acceleration_steps):
+  return (steps_being_moved - abs(distance_to_go)) <= acceleration_steps
+
+def is_decelerating(distance_to_go, deceleration_steps):
+  return abs(distance_to_go) <= deceleration_steps
