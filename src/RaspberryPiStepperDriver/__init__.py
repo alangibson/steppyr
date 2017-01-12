@@ -1,5 +1,6 @@
 import time
 
+DIRECTION_NONE = -1 # Stationary
 DIRECTION_CCW = 0   # Clockwise
 DIRECTION_CW  = 1   # Counter-Clockwise
 
