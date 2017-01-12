@@ -8,14 +8,14 @@ def constrain(value, minn, maxn):
     return max(min(maxn, value), minn)
 
 class MaxProfile(RampProfile):
-  def __init__(self, acceleration_steps=0, max_start_speed=0.0):
+  def __init__(self, acceleration_steps=0, max_start_speed=0.0, deceleration_steps=0):
     super().__init__()
     self._last_direction = DIRECTION_NONE
     # Number of steps to take to go from min start speed to target speed
     self._acceleration_steps = acceleration_steps
+    self._deceleration_steps = deceleration_steps
     # Max speed that the motor can start at in steps per second
     self._max_start_speed = max_start_speed
-    self._deceleration_steps = 5
 
   def compute_new_speed(self):
     # Determine direction
