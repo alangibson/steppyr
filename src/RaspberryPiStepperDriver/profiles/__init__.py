@@ -23,10 +23,12 @@ class RampProfile:
     # Previously set _target_steps. Used in calculating ramps
     self._previous_target_steps = 0
     # Acceleration in steps per second per second
-    self._acceleration = 0.0
+    # Defaults to 1.0 to avoid divide by zero errors
+    self._acceleration = 1.0
     # Microstep denominator ( 1/_microsteps )
     self._microsteps = 1
     # Number of full steps for motor to turn one revolution
+    # This default is for a 1.8 degree stepper
     self._motor_steps_per_rev = 200
 
   def set_target_speed(self, speed):
@@ -119,12 +121,15 @@ class RampProfile:
     """
     return DIRECTION_CW if self.distance_to_go > 0 else DIRECTION_CCW
 
-def calc_step_interval_us(self, speed):
+def calc_step_interval_us(speed):
+  """
+  Calculate step interval in microseconds based on speed in steps per second.
+  """
   if speed == 0.0:
     return 0
   return abs(1000000.0 / speed)
 
-def calc_direction(self, value):
+def calc_direction(value):
   """
   Value can be speed or steps to go
   """
