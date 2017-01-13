@@ -1,13 +1,13 @@
 from . import RampProfile, DIRECTION_CW, DIRECTION_CCW
-"""
-Calculates AccelStepper profile.
-Based on AccelStepper (http://www.airspayce.com/mikem/arduino/AccelStepper).
-"""
 import logging, math
 
 log = logging.getLogger(__name__)
 
 class AccelProfile(RampProfile):
+  """
+  Calculates AccelStepper profile.
+  Based on AccelStepper (http://www.airspayce.com/mikem/arduino/AccelStepper).
+  """
 
   def __init__(self):
     super().__init__()

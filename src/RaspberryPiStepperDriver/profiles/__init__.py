@@ -55,6 +55,12 @@ class RampProfile:
     """
     self.set_target_speed(calc_speed_from_rpm(rpm, steps_per_rev, self._microsteps))
 
+  def set_target_steps(self, absolute_steps):
+    if self._target_steps != absolute_steps:
+      self._previous_target_steps = self._target_steps
+      self._target_steps = absolute_steps
+      self.compute_new_speed()
+
   def set_acceleration(self, acceleration):
     """
     Sets acceleration value in steps per second per second and computes new speed.
@@ -114,6 +120,10 @@ class RampProfile:
     # +ve is clockwise from curent location
     """
     return self._target_steps - self._current_steps
+
+  @property
+  def is_moving(self):
+    return self.distance_to_go != 0
 
   def _current_direction(self):
     """

@@ -16,9 +16,7 @@ class StepperDriver:
     self._profile = profile
     # Time in microseconds that last step occured
     self._last_step_time_us = 0
-    # Needed to avoid div by 0 error in set_speed
-    # Set a default speed in rpm
-    # self._last_step_time_us = micros()
+    self._next_step_time_us = None
 
   def start(self):
     """
@@ -40,34 +38,28 @@ class StepperDriver:
     """
     Immediately stop the current move.
     """
-    self.set_current_position(self._profile._current_steps)
+    self._profile.set_current_position(self._profile._current_steps)
 
   def move(self, relative_steps):
     """
     Schedules move to a number of steps relative to the current step count.
     TODO copied from AccelStepper
     """
-    move_to_steps = self._profile._current_steps + relative_steps
-    self.move_to(move_to_steps)
+    self.move_to(self._profile._current_steps + relative_steps)
 
   def move_to(self, absolute_steps):
     """
     Schedules move to an absolute number of steps.
     """
-    if self._profile._target_steps != absolute_steps:
-      self._profile._previous_target_steps = self._profile._target_steps
-      self._profile._target_steps = absolute_steps
-      self._profile.compute_new_speed()
+    self._profile.set_target_steps(absolute_steps)
+    # If we don't have a next_step_time_us, we will never take a step in the run* loop
+    self._next_step_time_us = micros() + self._profile._step_interval_us
 
   def rotate(self, degrees):
     """
     Rotate motor a given number of degrees.
     """
     self.move(calc_degrees_to_steps(degrees, self._profile._motor_steps_per_rev, self._profile._microsteps))
-
-  @property
-  def is_moving(self):
-    return self._profile.distance_to_go != 0
 
   async def run_forever(self):
     """
@@ -82,7 +74,7 @@ class StepperDriver:
     """
     Blockingly calls run() until is_move == False
     """
-    while self.is_moving:
+    while self._profile.is_moving:
       await self.run()
       await asyncio.sleep(0)
 
@@ -95,7 +87,7 @@ class StepperDriver:
     """
     if await self.run_at_speed():
       self._profile.compute_new_speed()
-    return self.is_moving
+    return self._profile.is_moving
 
   async def run_at_speed(self):
     """
@@ -106,30 +98,41 @@ class StepperDriver:
     Returns True if a step occurred, False otherwise.
     """
     # Dont do anything unless we actually have a step interval
-    # Dont do anything unless we have somewhere to go
+    # and dont do anything unless we have somewhere to go
     if not self._profile._step_interval_us or not self._profile.distance_to_go:
       return False
 
-    # Time since this class was created in micrseconds.
-    # Basically the Arduino micros() function.
-    # time_us = (datetime.now() - self._start_time).total_seconds() * 1000000
+    # Save the current time in microseconds
     current_time_us = micros()
 
-    next_step_time_us = self._last_step_time_us + self._profile._step_interval_us
-    # if (current_time_us - self._last_step_time_us) >= self._profile._step_interval_us:
-    if current_time_us >= next_step_time_us:
+    # Note: because we save _next_step_time_us, a new _step_interval_us won't
+    # be taken into account until after the next step is done. We could also
+    # use this logic to constantly recalculate the next step time:
+    # next_step_time_us = self._last_step_time_us + self._profile._step_interval_us
+    # if current_time_us >= next_step_time_us:
+
+    if self._next_step_time_us and current_time_us >= self._next_step_time_us:
       # It is time to do a step
 
+      #log.debug('self._profile._target_steps=%s self._profile.distance_to_go=%s self._profile._direction=%s self._profile._current_steps=%s',
+      #  self._profile._target_steps, self._profile.distance_to_go, self._profile._direction, self._profile._current_steps)
+
+      # This is where we increment the profile's step counter and direction.
       if self._profile._direction == DIRECTION_CW:
         # Clockwise
         self._profile._current_steps += 1
       else:
-        # Anticlockwise
+        # Counter-Clockwise
         self._profile._current_steps -= 1
-      self.step(self._profile._direction)
+
+      # Tell the activator to take a step in a given direction
+      self._activator.step(self._profile._direction)
+
+      #log.debug('Taking a step. current_time_us=%s next_step_time_us=%s drift us=%s',
+      #  current_time_us, self._next_step_time_us, current_time_us - self._next_step_time_us)
 
       self._last_step_time_us = current_time_us
-      # self._next_step_time_us = current_time_us + self._step_interval_us
+      self._next_step_time_us = current_time_us + self._profile._step_interval_us
       return True
     else:
       # No step necessary at this time
@@ -141,18 +144,11 @@ class StepperDriver:
     Only use this method if you know there are no other calls to move() happening,
     or this method may never return. For example: during calibration at startup.
     """
-    while self.is_moving:
+    while self._profile.is_moving:
       await asyncio.sleep(0)
 
   def reset_step_counter(self):
-    self.set_current_position(0)
-
-  def set_current_position(self, position):
-    """
-    Useful during initialisations or after initial positioning
-    Sets speed to 0
-    """
-    self._profile.set_current_position(position)
+    self._profile.set_current_position(0)
 
   def predict_distance_to_go(self, target_steps):
     """
@@ -192,6 +188,13 @@ class StepperDriver:
     """
     self._profile.set_target_speed(speed)
 
+  def set_current_position(self, position):
+    """
+    Useful during initialisations or after initial positioning
+    Sets speed to 0
+    """
+    self._profile.set_current_position(position)
+
   @property
   def position(self):
     return self._profile._current_steps
@@ -201,12 +204,12 @@ class StepperDriver:
     return self._profile._direction
 
   @property
-  def is_moving(self):
-    return self._profile.distance_to_go != 0
-
-  @property
   def distance_to_go(self):
     return self._profile.distance_to_go
+
+  @property
+  def is_moving(self):
+    return self._profile.is_moving
 
   @property
   def acceleration(self):
@@ -225,6 +228,7 @@ class StepperDriver:
   #
 
   def step(self, direction):
+    log.debug('stepping: current_steps=%s direction=%s', self._profile._current_steps, self._profile._direction)
     self._activator.step(self._profile._direction)
 
   def set_pulse_width(self, pulse_width_us):
