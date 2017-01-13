@@ -81,21 +81,9 @@ class StepperDriver:
   async def run(self):
     """
     Run the motor to implement speed and acceleration in order to proceed to the target position
-    You must call this at least once per step, preferably in your main loop
+    You must call this at least once per step.
     If the motor is in the desired position, the cost is very small
     returns true if the motor is still running to the target position.
-    """
-    if await self.run_at_speed():
-      self._profile.compute_new_speed()
-    return self._profile.is_moving
-
-  async def run_at_speed(self):
-    """
-    Implements steps according to the current step interval.
-    Move 1 step if it is time for another step. Otherwise, do nothing.
-    Differs from run() in that it does not call compute_new_speed().
-    You must call this at least once per step.
-    Returns True if a step occurred, False otherwise.
     """
     # Dont do anything unless we actually have a step interval
     # and dont do anything unless we have somewhere to go
@@ -114,24 +102,17 @@ class StepperDriver:
     if self._next_step_time_us and current_time_us >= self._next_step_time_us:
       # It is time to do a step
 
-      # This is where we increment the profile's step counter and direction.
-      if self._profile.direction == DIRECTION_CW:
-        self._profile._current_steps += 1
-      elif self._profile.direction == DIRECTION_CCW:
-        self._profile._current_steps -= 1
-      else:
-        log.warn('It shouldnt be possible to get DIRECTION_NONE here')
-
       # Tell the activator to take a step in a given direction
-      self._activator.step(self._profile._direction)
+      self._activator.step(self._profile.direction)
+
+      # Tell profile we are taking a step
+      self._profile.step()
 
       # Record new time parameters
       self._last_step_time_us = current_time_us
       self._next_step_time_us = current_time_us + self._profile._step_interval_us
-      return True
-    else:
-      # No step necessary at this time
-      return False
+    # else: Do nothing
+    return self._profile.is_moving
 
   async def wait_on_move(self):
     """
