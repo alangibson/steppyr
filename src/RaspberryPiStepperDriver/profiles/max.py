@@ -53,19 +53,15 @@ class MaxProfile(RampProfile):
       abs_current_speed = self._max_start_speed
     # elif (steps_being_moved - abs(self.distance_to_go)) <= self._acceleration_steps:
     elif is_accelerating(steps_being_moved, self.distance_to_go, self._acceleration_steps):
-        print('We are accelerating')
         # We are accelerating
         print(abs_current_speed, acceleration_increment_steps, self._max_start_speed, self._target_speed)
         abs_current_speed = constrain(abs_current_speed + acceleration_increment_steps,
           self._max_start_speed, self._target_speed)
     # elif abs(self.distance_to_go) < adjusted_deceleration_steps:
     elif is_decelerating(self.distance_to_go, adjusted_deceleration_steps):
-      print('Start decelerating')
       # We are within _acceleration_steps of the end point. Start decelerating.
       abs_current_speed = abs_current_speed - deceleration_increment_steps
-    else:
-      print('we are cruising')
-      pass
+    # else: We are cruising
 
     # Adjust for signed-ness direction
     if self._direction == DIRECTION_CCW:
@@ -75,11 +71,11 @@ class MaxProfile(RampProfile):
     # Calculate the next step interval
     self._step_interval_us = calc_step_interval_us(self._current_speed)
 
-    log.debug('Computed new speed. _direction=%s, _current_steps=%s, _target_steps=%s, distance_to_go=%s, _current_speed=%s, _step_interval_us=%s acceleration_increment_steps=%s _target_speed=%s',
+    log.debug('Computed new speed. _direction=%s, _current_steps=%s, _target_steps=%s, distance_to_go=%s, _current_speed=%s, _step_interval_us=%s acceleration_increment_steps=%s deceleration_increment_steps=%s _target_speed=%s',
       self._direction, self._current_steps,
       self._target_steps, self.distance_to_go,
       self._current_speed, self._step_interval_us,
-      acceleration_increment_steps, self._target_speed)
+      acceleration_increment_steps, deceleration_increment_steps, self._target_speed)
 
 def calc_acceleration_increment_steps(acceleration_steps, target_speed_steps_per_sec, max_start_speed):
   """ Calculate the rate in steps at which we should accelerate """
@@ -112,4 +108,4 @@ def is_accelerating(steps_being_moved, distance_to_go, acceleration_steps):
   return (steps_being_moved - abs(distance_to_go)) <= acceleration_steps
 
 def is_decelerating(distance_to_go, deceleration_steps):
-  return abs(distance_to_go) <= deceleration_steps
+  return abs(distance_to_go) < deceleration_steps
