@@ -1,5 +1,5 @@
 import logging
-from .. import DIRECTION_CW, DIRECTION_CCW
+from .. import DIRECTION_CW, DIRECTION_CCW, DIRECTION_NONE
 
 log = logging.getLogger(__name__)
 
@@ -99,21 +99,6 @@ class RampProfile:
     self._microsteps = microsteps
     self.compute_new_speed()
 
-  """
-  TODO
-  def set_direction(self, direction):
-    ""
-    Set the direction we should step() in
-
-    direction: one of DIRECTION_CW or DIRECTION_CCW
-    ""
-    self._direction = direction
-
-  @property
-  def direction(self):
-    return self._direction
-  """
-
   @property
   def distance_to_go(self):
     """
@@ -125,11 +110,13 @@ class RampProfile:
   def is_moving(self):
     return self.distance_to_go != 0
 
-  def _current_direction(self):
+  @property
+  def direction(self):
     """
     Calculates direction based on distance to go
     """
-    return DIRECTION_CW if self.distance_to_go > 0 else DIRECTION_CCW
+    # return DIRECTION_CW if self.distance_to_go > 0 else DIRECTION_CCW
+    return calc_direction(self.distance_to_go)
 
 def calc_step_interval_us(speed):
   """
@@ -143,7 +130,12 @@ def calc_direction(value):
   """
   Value can be speed or steps to go
   """
-  return DIRECTION_CW if (value > 0.0) else DIRECTION_CCW
+  if value > 0:
+    return DIRECTION_CW
+  elif value < 0:
+    return DIRECTION_CCW
+  else:
+    return DIRECTION_NONE
 
 def calc_speed_from_rpm(rpm, steps_per_rev, microsteps):
   """
@@ -157,3 +149,6 @@ def calc_speed_from_rpm(rpm, steps_per_rev, microsteps):
   microsteps_per_rev = steps_per_rev * microsteps
   speed_steps_per_sec = rps * microsteps_per_rev
   return speed_steps_per_sec
+
+def calc_speed_from_step_interval(step_interval_us):
+  return abs(1000000.0 / step_interval_us)

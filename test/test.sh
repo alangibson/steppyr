@@ -2,6 +2,7 @@
 
 export PYTHONPATH=$PWD/src:$PWD/test/mock
 
+python3 test/test_accel_profile.py
 python3 test/test_max_profile.py
 python3 test/test_rampprofile.py
 python3 test/test_stepper.py

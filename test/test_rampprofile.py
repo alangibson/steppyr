@@ -22,7 +22,7 @@ def test_calc_direction():
   # Then
   assert(DIRECTION_CW == forward_direction)
   assert(DIRECTION_CCW == back_direction)
-  assert(DIRECTION_CCW == no_direction)
+  assert(DIRECTION_NONE == no_direction)
 
 def test_calc_step_interval_us():
   # Given

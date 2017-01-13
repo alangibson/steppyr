@@ -114,23 +114,18 @@ class StepperDriver:
     if self._next_step_time_us and current_time_us >= self._next_step_time_us:
       # It is time to do a step
 
-      #log.debug('self._profile._target_steps=%s self._profile.distance_to_go=%s self._profile._direction=%s self._profile._current_steps=%s',
-      #  self._profile._target_steps, self._profile.distance_to_go, self._profile._direction, self._profile._current_steps)
-
       # This is where we increment the profile's step counter and direction.
-      if self._profile._direction == DIRECTION_CW:
-        # Clockwise
+      if self._profile.direction == DIRECTION_CW:
         self._profile._current_steps += 1
-      else:
-        # Counter-Clockwise
+      elif self._profile.direction == DIRECTION_CCW:
         self._profile._current_steps -= 1
+      else:
+        log.warn('It shouldnt be possible to get DIRECTION_NONE here')
 
       # Tell the activator to take a step in a given direction
       self._activator.step(self._profile._direction)
 
-      #log.debug('Taking a step. current_time_us=%s next_step_time_us=%s drift us=%s',
-      #  current_time_us, self._next_step_time_us, current_time_us - self._next_step_time_us)
-
+      # Record new time parameters
       self._last_step_time_us = current_time_us
       self._next_step_time_us = current_time_us + self._profile._step_interval_us
       return True
