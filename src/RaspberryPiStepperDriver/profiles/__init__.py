@@ -99,6 +99,18 @@ class RampProfile:
     self._microsteps = microsteps
     self.compute_new_speed()
 
+  def step(self):
+    """
+    Register a step in the current direction.
+    This method is for drivers to notify the profile that they are taking a step.
+    """
+    if self.direction == DIRECTION_CW:
+      self._current_steps += 1
+    elif self.direction == DIRECTION_CCW:
+      self._current_steps -= 1
+    # else: do nothing
+    self.compute_new_speed()
+
   @property
   def distance_to_go(self):
     """
