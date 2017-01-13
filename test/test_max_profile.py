@@ -149,8 +149,9 @@ def test_compute_new_speed_1():
   # ( target_speed - max_start_speed) / acceleration_steps == 100
   target_speed = 1000
   acceleration_steps = 10
+  deceleration_steps = 5
   max_start_speed = 100.0
-  profile = MaxProfile(acceleration_steps=acceleration_steps, max_start_speed=max_start_speed)
+  profile = MaxProfile(acceleration_steps=acceleration_steps, max_start_speed=max_start_speed, deceleration_steps=deceleration_steps)
   profile._current_speed = 0
   # profile._step_interval_us = 0
   profile._target_steps = 20
