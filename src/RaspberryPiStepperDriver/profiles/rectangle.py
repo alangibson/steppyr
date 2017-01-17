@@ -1,4 +1,4 @@
-from . import RampProfile
+from . import RampProfile, calc_step_interval_us, calc_speed_from_step_interval, calc_direction
 
 """
 Extracted from tmc26x driver
@@ -15,10 +15,10 @@ class RectangleProfile(RampProfile):
     # steps_per_min = self._steps_per_rev * self.speed_rpm * self.microsteps
     # self._step_interval_us = us_per_min / steps_per_min
 
-    self._step_interval_us = 1000000 / self._target_speed
+    self._step_interval_us = calc_step_interval_us(self._target_speed)
     # Derive current speed from _step_interval_us
-    self._current_speed = 1000000.0 / self._step_interval_us
-    self._direction = self._current_direction()
+    self._current_speed = calc_speed_from_step_interval(self._step_interval_us)
+    self._direction = calc_direction(self.distance_to_go)
 
   """
   TODO implment this rpm based way also
