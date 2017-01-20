@@ -1,0 +1,6 @@
+
+def _BV(bit):
+  """
+  http://www.atmel.com/webdoc/AVRLibcReferenceManual/FAQ_1faq_use_bv.html
+  """
+  return 1 << bit
