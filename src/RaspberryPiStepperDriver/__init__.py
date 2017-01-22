@@ -1,4 +1,6 @@
-import time
+import logging, time
+
+log = logging.getLogger(__name__)
 
 DIRECTION_NONE = -1 # Stationary
 DIRECTION_CCW = 0   # Clockwise
@@ -28,3 +30,27 @@ def sign(val):
     return -1
   else:
     return 1
+
+def unset_bit(value, mask):
+  """ Convenience function to unset bits based on a mask """
+  new_value = value & ~ mask
+  log.debug('unsetting bit(s) %s %s -> %s', bin(value), bin(mask), bin(new_value))
+  return new_value
+
+def set_bit(value, mask):
+  """ Convenience function to set bits based on a mask """
+  new_value = value | mask
+  log.debug('setting bit(s) %s %s -> %s', bin(value), bin(mask), bin(new_value))
+  return new_value
+
+def tobin(x, n=8):
+  """
+  Returns a space separated string of bin representing byte input.
+  Accepts numbers and iterables.
+  """
+  if not hasattr(x, '__iter__'):
+    x = [x]
+  out = ''
+  for i in x:
+    out += (format(i, 'b').ljust(n, '0')) + ' '
+  return out

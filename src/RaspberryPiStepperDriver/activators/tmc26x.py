@@ -1,5 +1,6 @@
 import logging
 import RPi.GPIO as GPIO
+from RaspberryPiStepperDriver import tobin, set_bit, unset_bit
 from .stepdir import StepDirActivator
 
 """
@@ -596,17 +597,3 @@ class TMC26XActivator(StepDirActivator):
       return True
     else:
       return False
-
-def unset_bit(value, mask):
-  """ Convenience function to unset bits based on a mask """
-  new_value = value & ~ mask
-  log.debug('unsetting bit(s) %s %s -> %s', bin(value), bin(mask), bin(new_value))
-  return new_value
-
-def set_bit(value, mask):
-  """ Convenience function to set bits based on a mask """
-  new_value = value | mask
-  log.debug('setting bit(s) %s %s -> %s', bin(value), bin(mask), bin(new_value))
-  return new_value
-
-tobin = lambda x, n: format(x, 'b').ljust(n, '0')
