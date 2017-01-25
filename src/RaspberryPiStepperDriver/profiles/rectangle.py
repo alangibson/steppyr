@@ -1,3 +1,4 @@
+from RaspberryPiStepperDriver import micros
 from . import RampProfile, calc_step_interval_us, calc_speed_from_step_interval, calc_direction
 
 """
@@ -19,6 +20,7 @@ class RectangleProfile(RampProfile):
     # Derive current speed from _step_interval_us
     self._current_speed = calc_speed_from_step_interval(self._step_interval_us)
     self._direction = calc_direction(self.distance_to_go)
+    self._next_step_time_us = micros() + self._step_interval_us
 
   """
   TODO implment this rpm based way also
