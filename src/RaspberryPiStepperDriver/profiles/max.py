@@ -1,5 +1,5 @@
 import logging
-from RaspberryPiStepperDriver import DIRECTION_CW, DIRECTION_CCW, DIRECTION_NONE
+from RaspberryPiStepperDriver import DIRECTION_CW, DIRECTION_CCW, DIRECTION_NONE, micros
 from . import RampProfile, calc_direction, calc_step_interval_us
 
 log = logging.getLogger(__name__)
@@ -70,6 +70,7 @@ class MaxProfile(RampProfile):
 
     # Calculate the next step interval
     self._step_interval_us = calc_step_interval_us(self._current_speed)
+    self._next_step_time_us = micros() + self._step_interval_us
 
     log.debug('Computed new speed. _direction=%s, _current_steps=%s, _target_steps=%s, distance_to_go=%s, _current_speed=%s, _step_interval_us=%s acceleration_increment_steps=%s deceleration_increment_steps=%s _target_speed=%s',
       self._direction, self._current_steps,

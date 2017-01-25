@@ -1,4 +1,5 @@
-from . import RampProfile, DIRECTION_CW, DIRECTION_CCW, calc_speed_from_step_interval
+from RaspberryPiStepperDriver import DIRECTION_CW, DIRECTION_CCW, micros
+from . import RampProfile, calc_speed_from_step_interval
 import logging, math
 
 log = logging.getLogger(__name__)
@@ -113,6 +114,7 @@ class AccelProfile(RampProfile):
 
     self._ramp_step_number += 1
     self._step_interval_us = self._ramp_delay_n_us
+    self._next_step_time_us = micros() + self._step_interval_us
     self._current_speed = calc_speed_from_step_interval(self._ramp_delay_n_us)
 
     log.debug('Computed new speed. _direction=%s, _current_steps=%s, _target_steps=%s, distance_to_go=%s, _ramp_step_number=%s, _current_speed=%s, _step_interval_us=%s',

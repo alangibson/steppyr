@@ -1,5 +1,5 @@
 import logging
-from .. import DIRECTION_CW, DIRECTION_CCW, DIRECTION_NONE
+from .. import DIRECTION_CW, DIRECTION_CCW, DIRECTION_NONE, micros
 
 log = logging.getLogger(__name__)
 
@@ -30,6 +30,9 @@ class RampProfile:
     # Number of full steps for motor to turn one revolution
     # This default is for a 1.8 degree stepper
     self._motor_steps_per_rev = 200
+    # Time in microseconds that last step occured
+    self._last_step_time_us = 0
+    self._next_step_time_us = None
 
   def set_target_speed(self, speed):
     """
@@ -74,11 +77,13 @@ class RampProfile:
   def set_motor_steps_per_rev(self, steps_per_rev):
     self._motor_steps_per_rev = steps_per_rev
 
+  # FIXME compute _next_step_time_us
   def compute_new_speed(self):
     """
     Responsible for calculating the following values.
       _step_interval_us
       _current_speed
+      _next_step_time_us
     """
     pass
 
@@ -110,6 +115,15 @@ class RampProfile:
       self._current_steps -= 1
     # else: do nothing
     self.compute_new_speed()
+    self._last_step_time_us = micros()
+
+  def should_step(self):
+    """
+    Returns true if we should take a step.
+    """
+    if not self.step_interval_us or not self.distance_to_go:
+      return False
+    return (self._next_step_time_us and micros() >= self._next_step_time_us)
 
   @property
   def distance_to_go(self):
@@ -129,6 +143,10 @@ class RampProfile:
     """
     # return DIRECTION_CW if self.distance_to_go > 0 else DIRECTION_CCW
     return calc_direction(self.distance_to_go)
+
+  @property
+  def step_interval_us(self):
+    return self._step_interval_us
 
 def calc_step_interval_us(speed):
   """

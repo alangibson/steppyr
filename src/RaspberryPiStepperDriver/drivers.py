@@ -15,8 +15,8 @@ class StepperDriver:
     self._activator = activator
     self._profile = profile
     # Time in microseconds that last step occured
-    self._last_step_time_us = 0
-    self._next_step_time_us = None
+    # self._last_step_time_us = 0
+    # self._next_step_time_us = None
 
   def start(self):
     """
@@ -53,7 +53,7 @@ class StepperDriver:
     """
     self._profile.set_target_steps(absolute_steps)
     # If we don't have a next_step_time_us, we will never take a step in the run* loop
-    self._next_step_time_us = micros() + self._profile._step_interval_us
+    # self._next_step_time_us = micros() + self._profile._step_interval_us
 
   def rotate(self, degrees):
     """
@@ -82,16 +82,16 @@ class StepperDriver:
     """
     Run the motor to implement speed and acceleration in order to proceed to the target position
     You must call this at least once per step.
-    If the motor is in the desired position, the cost is very small
+    If the motor is in the desired position, the cost is very small.
     returns true if the motor is still running to the target position.
     """
     # Dont do anything unless we actually have a step interval
     # and dont do anything unless we have somewhere to go
-    if not self._profile._step_interval_us or not self._profile.distance_to_go:
-      return False
+    # if not self._profile.step_interval_us or not self._profile.distance_to_go:
+    #   return False
 
     # Save the current time in microseconds
-    current_time_us = micros()
+    # current_time_us = micros()
 
     # Note: because we save _next_step_time_us, a new _step_interval_us won't
     # be taken into account until after the next step is done. We could also
@@ -99,7 +99,8 @@ class StepperDriver:
     # next_step_time_us = self._last_step_time_us + self._profile._step_interval_us
     # if current_time_us >= next_step_time_us:
 
-    if self._next_step_time_us and current_time_us >= self._next_step_time_us:
+    # if self._next_step_time_us and current_time_us >= self._next_step_time_us:
+    if self._profile.should_step():
       # It is time to do a step
 
       # Tell the activator to take a step in a given direction
@@ -109,8 +110,8 @@ class StepperDriver:
       self._profile.step()
 
       # Record new time parameters
-      self._last_step_time_us = current_time_us
-      self._next_step_time_us = current_time_us + self._profile._step_interval_us
+      # self._last_step_time_us = current_time_us
+      # self._next_step_time_us = current_time_us + self._profile._step_interval_us
     # else: Do nothing
     return self._profile.is_moving
 
