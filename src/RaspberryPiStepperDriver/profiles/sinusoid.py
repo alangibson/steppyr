@@ -1,6 +1,8 @@
-import functools, math, time
+import functools, logging, math, time
 from RaspberryPiStepperDriver import DIRECTION_CW, DIRECTION_CCW, DIRECTION_NONE, project, micros
 from . import RampProfile
+
+log = logging.getLogger(__name__)
 
 def curve1(a=1, f=1, p=0):
   """
@@ -49,22 +51,20 @@ def reduce_amplitude(a, b):
 
 class SinusoidProfile(RampProfile):
 
-  def __init__(self, curves, full_steps_per_sec, length_full_steps, microsteps=1):
+  def __init__(self, waves):
     super().__init__()
-    # the target speed in full steps per second
-    self._target_speed = full_steps_per_sec
-    
     # Total lenght of y axis in full steps
     # Equal to 2 x radius of unit circle
-    self._length_full_steps = length_full_steps
+    # self._length_full_steps = length_full_steps
     self._last_y = None
     self._last_step = None
-    self._microsteps = microsteps
-    self._length_steps = length_full_steps * microsteps
-    self._amplitude = self._length_steps / 2
-    self._curves = curves
+    # self._length_steps = length_full_steps * microsteps
+    # self._amplitude = self._length_steps / 2
+    self._waves = waves
     # Calculate the sum of all amplitudes
-    self._max_amplitude = functools.reduce(reduce_amplitude, curves)
+    self._sum_amplitudes = functools.reduce(reduce_amplitude, waves)
+    # TODO this assumes all amplitudes are the same
+    self._diameter_steps = self._waves[0][0] * 2
     self._start_time_sec = time.time()
     self._next_step = None
 
@@ -73,11 +73,12 @@ class SinusoidProfile(RampProfile):
     t = time.time() - self._start_time_sec
     # Calculate y based on time
     y = 0
-    for amplitude, frequency, phase_shift in self._curves:
+    for amplitude, frequency, phase_shift in self._waves:
       y += curve1(a=amplitude, f=frequency, p=phase_shift)(t)
-    # FIXME target range of 0, self._length_steps is wrong
-    y = project(y, -self._max_amplitude, self._max_amplitude, 0, self._length_steps)
+    y = project(y, -self._sum_amplitudes, self._sum_amplitudes, 0, self._diameter_steps)
     y = math.ceil(y)
+    # log.debug('should_step: y=%s max_amplitude=%s _current_steps=%s',
+    #   y, max_amplitude, self._current_steps)
     # Figure out if it is time to step
     if y != self._current_steps:
       self._next_step = y
@@ -90,16 +91,13 @@ class SinusoidProfile(RampProfile):
     Register a step in the current direction.
     This method is for drivers to notify the profile that they are taking a step.
     """
-    # if self.direction == DIRECTION_CW:
-    #  self._current_steps += 1
-    #elif self.direction == DIRECTION_CCW:
-    #  self._current_steps -= 1
     self._current_steps = self._next_step
     # else: do nothing
     self.compute_new_speed()
     self._last_step_time_us = micros()
 
   # FIXME needs to look ahead to next next_step to determine direction
+  # otherwise we return DIRECTION_NONE between step() and should_step()
   @property
   def direction(self):
     if self._next_step > self._current_steps:
