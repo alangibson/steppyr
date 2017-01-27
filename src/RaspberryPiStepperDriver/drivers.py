@@ -74,6 +74,7 @@ class StepperDriver:
     """
     Blockingly calls run() until is_move == False
     """
+    # log.debug('run_until_done _profile.is_moving=%s', self._profile.is_moving)
     while self._profile.is_moving:
       await self.run()
       await asyncio.sleep(0)
@@ -101,13 +102,16 @@ class StepperDriver:
 
     # if self._next_step_time_us and current_time_us >= self._next_step_time_us:
     if self._profile.should_step():
+      # log.debug('run should_step')
       # It is time to do a step
 
       # Tell the activator to take a step in a given direction
       self._activator.step(self._profile.direction)
 
       # Tell profile we are taking a step
+      # log.debug('_current_steps=%s', self._profile._current_steps)
       self._profile.step()
+      # log.debug('_current_steps=%s', self.position)
 
       # Record new time parameters
       # self._last_step_time_us = current_time_us
