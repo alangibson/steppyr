@@ -7,7 +7,7 @@ from RaspberryPiStepperDriver.activators import spi as activator_spi
 log = logging.getLogger(__name__)
 
 class SPI(activator_spi.SPI):
-  
+
   def writeRegister(self, the_register, datagram):
     """
     Arguments:
@@ -32,7 +32,6 @@ class SPI(activator_spi.SPI):
   def sendRegister(self, the_register, datagram):
     """
     Arguments:
-    (unsigned const char) motor_nr
     (unsigned const char) the_register
     (unsigned const long) datagram
 

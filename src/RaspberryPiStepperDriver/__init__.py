@@ -54,3 +54,19 @@ def tobin(x, n=8):
   for i in x:
     out += (format(i, 'b').ljust(n, '0')) + ' '
   return out
+
+def datagram_to_int(datagram):
+  """
+  Reduce a list of bytes or ints to a single int
+  """
+  value = 0
+  for b in datagram:
+    value = value << 8
+    value |= b
+  # Support twos-compliment negative integers
+  bits = len(datagram) * 8
+  # if sign bit is set e.g., 8bit: 128-255
+  if (value & (1 << (bits - 1))) != 0:
+    # compute negative value
+    value = value - (1 << bits)
+  return value

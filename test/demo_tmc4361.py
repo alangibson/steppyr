@@ -1,5 +1,6 @@
 import logging
 import RPi.GPIO as GPIO
+from RaspberryPiStepperDriver import sleep_microseconds
 from RaspberryPiStepperDriver.motion.tmc4361 import driver as drv
 from RaspberryPiStepperDriver.motion.tmc4361.spi import SPI
 
@@ -14,5 +15,12 @@ driver = drv.TMC4361(
 )
 
 driver.start()
+
+driver.move_to(-2000)
+for i in range(1, 5):
+  print('get_current_speed', driver.get_current_speed())
+  print('get_target_position', driver.get_target_position())
+  print('get_current_position', driver.get_current_position())
+  sleep_microseconds(100)
 
 GPIO.cleanup()
