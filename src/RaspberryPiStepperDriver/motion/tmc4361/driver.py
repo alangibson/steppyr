@@ -41,7 +41,9 @@ class TMC4361:
     self._spi.writeRegister(registers.TMC4361_START_CONFIG_REGISTER, 0 | _BV(5))
 
     GPIO.output(self._start_signal_pin, GPIO.HIGH)
-    GPIO.setup(self._start_signal_pin, GPIO.IN)
+    # GPIO.setup(self._start_signal_pin, GPIO.IN)
+    sleep_microseconds(1)
+    GPIO.output(self._start_signal_pin, GPIO.LOW)
 
     self._is_homing = False
     # TODO digitalWriteFast(START_SIGNAL_PIN,HIGH);

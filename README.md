@@ -2,11 +2,35 @@
 
 Python Raspberry Pi library for the STEP/DIR stepper drivers.
 
+## Installation
+
+### Installing WiringPi/GPIO for TMC4361
+
+If you are using the TMC4361 and want to use the Raspberry Pi to provide the
+external clock signal, you will need to use the gpio program included with
+wiringPi in order to activate the clock pin. This is mainly due to the fact
+that the RPi.GPIO library does not support setting the clock pin.
+
+    git clone git://git.drogon.net/wiringPi
+    cd wiringPi
+    ./build
+    gpio readall
+
 ## Usage
+
+### TMC4361 motion controller
+
+If you are using the TMC4361 and want to use the Raspberry Pi to provide the
+external clock signal, you will need to manually set the clock pin (BCM 4).
+
+    gpio mode 7 clock
+    gpio clock 7 1600000
+
+### TMC26x driver
 
 For a TMC26X driver, first make sure you have spidev installed:
 
-  pip install spidev
+    pip install spidev
 
 TMC26X example code:
 

@@ -224,9 +224,7 @@ class TMC26XActivator(StepDirActivator):
     """
     # Send datagram to driver
     msg = [ ((datagram >> 16) & 0xff), ((datagram >>  8) & 0xff), ((datagram) & 0xff) ]
-    log.debug('spi  >> %s', tobin(datagram, 20))
     out = self.spi.transfer(msg)
-    log.debug('spi <<  %s', tobin(out[0], 20))
 
     # Process and save the response
     response = out[0]
