@@ -1,4 +1,4 @@
-import logging, time
+import functools, logging, time
 
 log = logging.getLogger(__name__)
 
@@ -48,7 +48,17 @@ def clear_bit(value, bit):
   Clear a bit, aka set it to 0
   """
   return value & ~(1<<bit)
-  
+
+def mask(begin, end):
+  return functools.reduce(lambda a,b: a+b, [2**i for i in range(begin, end+1)])
+
+def _BV(bit):
+  """
+  An implementation of the Arduino _BV macro.
+  http://www.atmel.com/webdoc/AVRLibcReferenceManual/FAQ_1faq_use_bv.html
+  """
+  return 1 << bit
+
 def lsb(x):
   """
   Returns the index, counting from 0, of the least significant set bit in `x`.

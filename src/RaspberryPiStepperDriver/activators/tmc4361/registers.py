@@ -2,12 +2,8 @@
 registers for TMC4361
 """
 import functools
-from RaspberryPiStepperDriver import set_bit, unset_bit, lsb
-from RaspberryPiStepperDriver.motion.tmc4361 import _BV
+from RaspberryPiStepperDriver import set_bit, unset_bit, lsb, mask, _BV
 from RaspberryPiStepperDriver.motion.tmc4361.io import Datagram
-
-def mask(begin, end):
-  return functools.reduce(lambda a,b: a+b, [2**i for i in range(begin, end+1)])
 
 WRITE_MASK = 0x80 # register | WRITE_MASK
 READ_MASK = 0x7F # register & READ_MASK

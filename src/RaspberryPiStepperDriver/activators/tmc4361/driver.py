@@ -1,8 +1,7 @@
 import logging
 import RPi.GPIO as GPIO
-from RaspberryPiStepperDriver import sleep_microseconds, tobin, set_bit, unset_bit, datagram_to_int
+from RaspberryPiStepperDriver import sleep_microseconds, tobin, set_bit, unset_bit, datagram_to_int, _BV
 from RaspberryPiStepperDriver.motion.tmc4361.registers import *
-from . import registers, _BV
 
 log = logging.getLogger(__name__)
 
