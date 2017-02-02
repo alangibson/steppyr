@@ -34,14 +34,27 @@ def sign(val):
 def unset_bit(value, mask):
   """ Convenience function to unset bits based on a mask """
   new_value = value & ~ mask
-  log.debug('unsetting bit(s) %s %s -> %s', bin(value), bin(mask), bin(new_value))
+  #log.debug('unsetting bit(s) %s %s -> %s', bin(value), bin(mask), bin(new_value))
   return new_value
 
 def set_bit(value, mask):
   """ Convenience function to set bits based on a mask """
   new_value = value | mask
-  log.debug('setting bit(s) %s %s -> %s', bin(value), bin(mask), bin(new_value))
+  #log.debug('setting bit(s) %s %s -> %s', bin(value), bin(mask), bin(new_value))
   return new_value
+
+def clear_bit(value, bit):
+  """
+  Clear a bit, aka set it to 0
+  """
+  return value & ~(1<<bit)
+  
+def lsb(x):
+  """
+  Returns the index, counting from 0, of the least significant set bit in `x`.
+  http://stackoverflow.com/questions/5520655/return-index-of-least-significant-bit-in-python
+  """
+  return ( x & -x).bit_length() - 1
 
 def tobin(x, n=8):
   """

@@ -1,7 +1,9 @@
 """
 registers for TMC4361
 """
-from . import _BV
+from RaspberryPiStepperDriver import set_bit, unset_bit, lsb
+from RaspberryPiStepperDriver.motion.tmc4361 import _BV
+from RaspberryPiStepperDriver.motion.tmc4361.io import Datagram
 
 WRITE_MASK = 0x80 # register | WRITE_MASK
 READ_MASK = 0x7F # register & READ_MASK
@@ -203,14 +205,6 @@ TMC4361_GEAR_RATIO_REGISTER = 0x12
 TMC4361_START_DELAY_REGISTER = 0x13
 
 # Ramp Generator Registers
-# RW. Ramp operation mode and motion profile.
-# Bit 2: Operation Mode:
-#   1 Positioning mode: XTARGET is superior target of velocity ramp.
-#   0 Velocitiy mode: VMAX is superior target of velocity ramp.
-# Bit 1:0: Motion Profile:
-#   0: No ramp: VACTUAL follows only VMAX (rectangle velocity shape).
-#   1: Trapezoidal ramp (incl. sixPoint ramp): Consideration of acceleration and deceleration values for generating VACTUAL without adapting the acceleration values.
-#   2: S-shaped ramp: Consideration of all ramp values (incl. bow values) for generating VACTUAL.
 TMC4361_RAMP_MODE_REGISTER = 0x20
 # RW. Current internal microstep position; signed; 32 bits
 # RW. Bit 0:31. Actual internal motor position [pulses]: –2^31 ≤ XACTUAL ≤ 2^31 – 1
@@ -293,3 +287,276 @@ TMC4361_COVER_DRV_HIGH_REGISTER = 0x6F
 # how to mask REFERENCE_CONFIG_REGISTER if you want to configure just one end
 TMC4361_LEFT_ENDSTOP_REGISTER_PATTERN = (_BV(0) | _BV(2) | _BV(6) | _BV(10) | _BV(11) | _BV(14))
 TMC4361_RIGHT_ENDSTOP_REGISTER_PATTERN = (_BV(1) | _BV(3) | _BV(7) | _BV(12) | _BV(13) | _BV(15))
+
+def bits(n):
+  """
+  Returns position of all bits = 1.
+  http://stackoverflow.com/questions/8898807/pythonic-way-to-iterate-over-bits-of-integer
+  """
+  while n:
+    b = n & (~n+1)
+    yield b
+    n ^= b
+
+class AttributeDict(dict):
+  __getattr__ = dict.__getitem__
+  __setattr__ = dict.__setitem__
+
+class Register(Datagram):
+
+  def __init__(self, register_value=0):
+    self._header = self.REGISTER
+    self._data = register_value
+
+  def set(self, bitmask, value=None):
+    if value == None:
+      # Just apply the bitmask itself
+      self._data = set_bit(self._data, bitmask)
+    else:
+      # Apply value at bitmask bits
+      self._data = set_bit(unset_bit(self._data, bitmask), (value << lsb(bitmask)))
+    return self
+
+  def unset(self, bitmask):
+    self._data = unset_bit(self._data, bitmask)
+    return self
+
+  def get_values(self):
+    events = []
+    for name, bitmask in self.bits.items():
+      if self._data & bitmask:
+        events.append((name, bitmask))
+    return events
+
+class StatusEventRegister(Register):
+  """
+  """
+  REGISTER = TMC4361_EVENTS_REGISTER
+  bits = AttributeDict({
+    # TARGET_REACHED has been triggered
+    'TARGET_REACHED': _BV(0),
+    # POS_COMP_REACHED has been triggered.
+    'POS_COMP_REACHED': _BV(1),
+    # VEL_REACHED has been triggered.
+    'VEL_REACHED': _BV(2),
+    # VEL_STATE': b’00 has been triggered (VACTUAL = 0).
+    'VACTUAL_EQ_0': _BV(3),
+    # VEL_STATE = b’01 has been triggered (VACTUAL > 0).
+    'VACTUAL_GT_0': _BV(4),
+    # VEL_STATE = b’10 has been triggered (VACTUAL < 0).
+    'VACTUAL_LT_0': _BV(5),
+    # RAMP_STATE = b’00 has been triggered (AACTUAL = 0, VACTUAL is constant).
+    'RAMP_STATE_00': _BV(6),
+    # RAMP_STATE = b’01 has been triggered (|VACTUAL| increases).
+    'RAMP_STATE_01': _BV(7),
+    # RAMP_STATE = b’10 has been triggered (|VACTUAL| increases).
+    'RAMP_STATE_10': _BV(8),
+    # MAX_PHASE_TRAP: Trapezoidal ramp has reached its limit speed using maximum values for AMAX or DMAX (|VACTUAL| > VBREAK; VBREAK≠0).
+    'MAX_PHASE_TRAP': _BV(9),
+    # FROZEN: NFREEZE has switched to low level. Reset TMC4361A for further motion.
+    'FROZEN': _BV(10),
+    # STOPL has been triggered. Motion in negative direction is not executed until this event is cleared and (STOPL is not active any more or stop_left_en is set to 0).
+    'STOPL_TRIGGERED': _BV(11),
+    # STOPR has been triggered. Motion in positive direction is not executed until this event is cleared and (STOPR is not active any more or stop_right_en is set to 0).
+    'STOPR_TRIGGERED': _BV(12),
+    # VSTOPL_ACTIVE: VSTOPL has been activated. No further motion in negative direction until this event is cleared and (a new value is chosen for VSTOPL or virtual_left_limit_en is set to 0).
+    'VSTOPL_ACTIVE': _BV(13),
+    # VSTOPR_ACTIVE: VSTOPR has been activated. No further motion in positive direction until this event is cleared and (a new value is chosen for VSTOPR or virtual_right_limit_en is set to 0).
+    'VSTOPR_ACTIVE': _BV(14),
+    # HOME_ERROR: Unmatched HOME_REF polarity and HOME is outside of safety margin.
+    'HOME_ERROR': _BV(15),
+    # XLATCH_DONE indicates if X_LATCH was rewritten or homing process has been completed.
+    'XLATCH_DONE': _BV(16),
+    # FS_ACTIVE: Fullstep motion has been activated.
+    'FS_ACTIVE': _BV(17),
+    # ENC_FAIL: Mismatch between XACTUAL and ENC_POS has exceeded specified limit.
+    'ENC_FAIL': _BV(18),
+    # N_ACTIVE: N event has been activated.
+    'N_ACTIVE': _BV(19),
+    # ENC_DONE indicates if ENC_LATCH was rewritten.
+    'ENC_DONE': _BV(20),
+    # SER_ENC_DATA_FAIL: Failure during multi-cycle data evaluation or between two consecutive data requests has occured.
+    'SER_ENC_DATA_FAIL': _BV(21),
+    # 22: Reserved
+    # SER_DATA_DONE: Configuration data was received from serial SPI encoder.
+    'SER_DATA_DONE': _BV(23),
+    # One of the SERIAL_ENC_Flags was set.
+    'SERIAL_ENC_FLAG_SET': _BV(24),
+    # COVER_DONE: SPI datagram was sent to the motor driver.
+    'COVER_DONE': _BV(25),
+    # ENC_VEL0: Encoder velocity has reached 0.
+    'ENC_VEL0': _BV(26),
+    # CL_MAX: Closed-loop commutation angle has reached maximum value.
+    'CL_MAX': _BV(27),
+    # CL_FIT: Closed-loop deviation has reached inner limit
+    'CL_FIT': _BV(28),
+    # STOP_ON_STALL: Motor stall detected. Motor ramp has stopped.
+    'STOP_ON_STALL': _BV(29),
+    # MOTOR_EV: One of the selected TMC motor driver flags was triggered.
+    'MOTOR_EV': _BV(30),
+    # RST_EV: Reset was triggered.
+    'RST_EV': _BV(31)
+  })
+
+class SpiStatusSelectionRegister(Register):
+  """
+  Represents SPI_STATUS_SELECTION Register (0x0B).
+
+  Events selection for SPI datagrams:
+  Event bits of EVENTS register 0x0E that are selected (=1) in this register are
+  forwarded to the eight status bits that are transferred with every SPI datagram (first
+  eight bits from LSB are significant!).
+  """
+  REGISTER = TMC4361_SPI_STATUS_SELECTION_REGISTER
+  bits = StatusEventRegister.bits
+
+class GeneralConfigurationRegister(Register):
+  REGISTER = TMC4361_GENERAL_CONFIG_REGISTER
+  bits = AttributeDict({
+    # use_astart_and_vstart (only valid for S-shaped ramps)
+    # 0 Sets AACTUAL = AMAX or –AMAX at ramp start and in the case of VSTART ≠ 0.
+    # 1 Sets AACTUAL = ASTART or –ASTART at ramp start and in the case of VSTART ≠ 0.
+    'USE_ASTART_AND_VSTART': _BV(0),
+    # 0 Acceleration values are divided by CLK_FREQ.
+    # 1 Acceleration values are set directly as steps per clock cycle.
+    'DIRECT_ACC_VAL_EN': _BV(1),
+    # 0 Bow values are calculated due to division by CLK_FREQ.
+    # 1 Bow values are set directly as steps per clock cycle.
+    'DIRECT_BOW_VAL_EN': _BV(2),
+    # 0 STPOUT = 1 indicates an active step.
+    # 1 STPOUT = 0 indicates an active step.
+    'STEP_INACTIVE_POL': _BV(3),
+    # 0 Only STPOUT transitions from inactive to active polarity indicate steps.
+    # 1 Every level change of STPOUT indicates a step.
+    'TOGGLE_STEP': _BV(4),
+    # 0 DIROUT = 0 indicates negative direction.
+    # 1 DIROUT = 1 indicates negative direction.
+    'POL_DIR_OUT': _BV(5),
+    # 0 Internal step control (internal ramp generator will be used)
+    # 1 External step control via STPIN / DIRIN interface with high active steps at STPIN
+    # 2 External step control via STPIN / DIRIN interface with low active steps at STPIN
+    # 3 External step control via STPIN / DIRIN interface with toggling steps at STPIN
+    'SDIN_MODE': _BV(6) | _BV(7),
+    # 0 DIRIN = 0 indicates negative direction.
+    # 1 DIRIN = 1 indicates negative direction.
+    'POL_DIR_IN': _BV(8),
+    # 0 STPIN/DIRIN input signals will manipulate internal steps at XACTUAL directly.
+    # 1 STPIN/DIRIN input signals will manipulate XTARGET register value, the internal ramp generator is used.
+    'SD_INDIRECT_CONTROL': _BV(9),
+    # 0 An incremental encoder is connected to encoder interface.
+    # 1 An absolute SSI encoder is connected to encoder interface.
+    # 2 Reserved
+    # 3 An absolute SPI encoder is connected to encoder interface
+    'SERIAL_ENC_IN_MODE': _BV(11) | _BV(10),
+    # 0 Differential encoder interface inputs enabled.
+    # 1 Differential encoder interface inputs is disabled (automatically set for SPI encoder).
+    'DIFF_ENC_IN_DISABLE': _BV(12),
+    # 0 Standby signal becomes forwarded with an active low level at STDBY_CLK output.
+    # 1 Standby signal becomes forwarded with an active high level at STDBY_CLK output.
+    # 2 STDBY_CLK passes ChopSync clock (TMC23x, TMC24x stepper motor drivers only).
+    # 3 Internal clock is forwarded to STDBY_CLK output pin.
+    'STDBY_CLK_PIN_ASSIGNMENT': _BV(14) | _BV(13),
+    # 0 INTR=0 indicates an active interrupt.
+    # 1 INTR=1 indicates an active interrupt.
+    'INTR_POL': _BV(15),
+    # 0 TARGET_REACHED signal is set to 1 to indicate a target reached event.
+    # 1 TARGET_REACHED signal is set to 0 to indicate a target reached event.
+    'INVERT_POL_TARGET_REACHED': _BV(16),
+    # 0 Clock gating is disabled.
+    # 1 Internal clock gating is enabled.
+    'CLK_GATING_EN': _BV(17),
+    # 0 No clock gating during standby phase.
+    # 1 Intenal clock gating during standby phase is enabled.
+    'CLK_GATING_STDBY_EN': _BV(18),
+    # 0 Fullstep switchover is disabled.
+    # 1 SPI output forwards fullsteps, if |VACTUAL| > FS_VEL
+    'FS_EN': _BV(19),
+    # 0 No fullstep switchover for Step/Dir output is enabled.
+    # 1 Fullsteps are forwarded via Step/Dir output also if fullstep operation is active.
+    'FS_SDOUT': _BV(20),
+    # 0 dcStep is disabled.
+    # 1 dcStep signal generation will be selected automatically
+    # 2 dcStep with external STEP_READY signal generation (TMC2130).
+    # 3 dcStep with internal STEP_READY signal generation (TMC26x).
+    #   TMC26x config: use const_toff-Chopper (CHM = 1);
+    #   slow decay only (HSTRRT = 0);
+    #   TST = 1 and SGT0=SGT1=1 (on_state_xy).
+    'DCSTEP_MODE': _BV(22) | _BV(21),
+    # 0 PWM output is disabled. Step/Dir output is enabled at STPOUT/DIROUT.
+    # 1 STPOUT/DIROUT output pins are used as PWM output (PWMA/PWMB).
+    'PWM_OUT_EN': _BV(23),
+    # 0 No encoder is connected to SPI output.
+    # 1 SPI output is used as SSI encoder interface to forward absolute SSI encoder data.
+    'SERIAL_ENC_OUT_ENABLE': _BV(24),
+    # 0 Differential serial encoder output is enabled.
+    # 1 Differential serial encoder output is disabled.
+    'SERIAL_ENC_OUT_DIFF_DISABLE': _BV(25),
+    # 0 VACTUAL=0 & AACTUAL=0 after switching off direct external step control.
+    # 1 VACTUAL = VSTART and AACTUAL = ASTART after switching off direct external step control.
+    'AUTOMATIC_DIRECT_SDIN_SWITCH_OFF': _BV(26),
+    # 0 The register value of X_LATCH is forwarded at register 0x36.
+    # 1 The register value of REV_CNT (#internal revolutions) is forwarded at register 0x36.
+    'CIRCULAR_CNT_AS_XLATCH': _BV(27),
+    # 0 The direction of the internal SinLUT is regularly used.
+    # 1 The direction of internal SinLUT is reversed
+    'REVERSE_MOTOR_DIR': _BV(28),
+    # 0 INTR and TARGET_REACHED are outputs with strongly driven output values..
+    # 1 INTR and TARGET_REACHED are used as outputs with gated pull-up and/or pull-down functionality.
+    'INTR_TR_PU_PD_EN': _BV(29),
+    # 0 INTR output function is used as Wired-Or in the case of intr_tr_pu_pd_en = 1.
+    # 1 INTR output function is used as Wired-And. in the case of intr_tr_pu_pd_en = 1.
+    'INTR_AS_WIRED_AND': _BV(30),
+    # 0 TARGET_REACHED output function is used as Wired-Or in the case of intr_tr_pu_pd_en = 1.
+    # 1 TARGET_REACHED output function is used as Wired-And in the case of intr_tr_pu_pd_en = 1.
+    'TR_AS_WIRED_AND': _BV(31)
+  })
+
+class RampModeRegister(Register):
+  """
+  Ramp operation mode and motion profile.
+  """
+  REGISTER = TMC4361_RAMP_MODE_REGISTER
+  bits = AttributeDict({
+    # Bit 1:0: Motion Profile:
+    #   0: No ramp: VACTUAL follows only VMAX (rectangle velocity shape).
+    #   1: Trapezoidal ramp (incl. sixPoint ramp): Consideration of acceleration and deceleration values for generating VACTUAL without adapting the acceleration values.
+    #   2: S-shaped ramp: Consideration of all ramp values (incl. bow values) for generating VACTUAL.
+    'MOTION_PROFILE': _BV(0) | _BV(1),
+    # Bit 2: Operation Mode:
+    #   1 Positioning mode: XTARGET is superior target of velocity ramp.
+    #   0 Velocitiy mode: VMAX is superior target of velocity ramp.
+    'OPERATION_MODE': _BV(2)
+  })
+
+class ExternalClockFrequencyRegister(Register):
+  REGISTER = TMC4361_CLK_FREQ_REGISTER
+  bits = AttributeDict({
+    # RW. External clock frequency fCLK; unsigned; 25 bits.
+    'EXTERNAL_CLOCK_FREQUENCY': 0b1111111111111111111111111
+  })
+
+class MotorDriverSettingsRegister(Register):
+  REGISTER = TMC4361_STEP_CONF_REGISTER
+  bits = AttributeDict({
+    # Highest microsteps resolution: 256 microsteps per fullstep.
+    # Set to 256 for closed-loop operation.
+    # When using a Step/Dir driver, it must be capable of a 256 resolution via
+    # Step/Dir input for best performance (but lower resolution Step/Dir drivers
+    # can be used as well).
+    # 1 128 microsteps per fullstep.
+    # 2 64 microsteps per fullstep.
+    # 3 32 microsteps per fullstep.
+    # 4 16 microsteps per fullstep.
+    # 5 8 microsteps per fullstep.
+    # 6 4 microsteps per fullstep.
+    # 7 Halfsteps: 2 microsteps per fullstep.
+    # 8 Full steps (maximum possible setting)
+    'MSTEP_PER_FS': 0b1111,
+    # Fullsteps per motor axis revolution
+    'FS_PER_REV': 0b0000111111111111,
+    # Selection of motor driver status bits for SPI response datagrams: ORed
+    # with Motor Driver Status Register Set (7:0): if set here and a particular
+    # flag is set from the motor stepper driver, an event will be generated at EVENTS(30)
+    'MSTATUS_SELECTION': 0b000000000000000011111111
+    # 31:24 Reserved. Set to 0x00.
+  })

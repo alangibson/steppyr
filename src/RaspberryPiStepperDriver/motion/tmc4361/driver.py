@@ -1,5 +1,6 @@
 import RPi.GPIO as GPIO
 from RaspberryPiStepperDriver import sleep_microseconds, tobin, set_bit, unset_bit, datagram_to_int
+from RaspberryPiStepperDriver.motion.tmc4361.registers import *
 from . import registers, _BV
 
 # TODO different from standard values
@@ -19,7 +20,7 @@ RAMP_MODE_NO_RAMP = 0b000
 RAMP_MODE_TRAPEZOIDAL_RAMP = 0b001
 RAMP_MODE_S_SHAPED_RAMP = 0b010
 # General Conf Register
-GENERAL_CONF_SERIAL_ENC_OUT_ENABLE = _BV(24)
+# GENERAL_CONF_SERIAL_ENC_OUT_ENABLE = _BV(24)
 # Start Switch Configuration Register
 START_CONFIG_START_EN_NONE = 0b00000
 START_CONFIG_TRIGGER_EVENTS_DISABLED = 0b0000
@@ -109,18 +110,32 @@ class TMC4361:
 
     # Select the events we want reported with every status code.
     # see datasheet 19.13-19.14
-    self._spi.writeRegister(registers.TMC4361_SPI_STATUS_SELECTION_REGISTER, 0 | _BV(0) | _BV(1))
+    # Old api: self._spi.writeRegister(registers.TMC4361_SPI_STATUS_SELECTION_REGISTER, 0 | _BV(0) | _BV(1))
+    self._spi.write(SpiStatusSelectionRegister()
+      .set(StatusEventRegister.bits.TARGET_REACHED)
+      .set(StatusEventRegister.bits.POS_COMP_REACHED)
+    )
 
-    self._spi.writeRegister(registers.TMC4361_GENERAL_CONFIG_REGISTER, 0 | _BV(5) | GENERAL_CONF_SERIAL_ENC_OUT_ENABLE)
+    # self._spi.writeRegister(registers.TMC4361_GENERAL_CONFIG_REGISTER, 0 | _BV(5) | GENERAL_CONF_SERIAL_ENC_OUT_ENABLE)
+    self._spi.write(GeneralConfigurationRegister()
+      .set(GeneralConfigurationRegister.bits.POL_DIR_OUT)
+    )
 
     # Set positioning and ramp shape
     # self._spi.writeRegister(registers.TMC4361_RAMP_MODE_REGISTER, RAMP_MODE_POSITIONING_MODE | RAMP_MODE_S_SHAPED_RAMP)
     # self._spi.writeRegister(registers.TMC4361_SH_RAMP_MODE_REGISTER, RAMP_MODE_POSITIONING_MODE | RAMP_MODE_S_SHAPED_RAMP)
     # Section 6.3.4 No Ramp Motion Profile
-    self._spi.writeRegister(registers.TMC4361_RAMP_MODE_REGISTER, RAMP_MODE_POSITIONING_MODE | RAMP_MODE_NO_RAMP)
-    self._spi.writeRegister(registers.TMC4361_SH_RAMP_MODE_REGISTER, RAMP_MODE_POSITIONING_MODE | RAMP_MODE_NO_RAMP)
+    # self._spi.writeRegister(registers.TMC4361_RAMP_MODE_REGISTER, RAMP_MODE_POSITIONING_MODE | RAMP_MODE_NO_RAMP)
+    self._spi.write(RampModeRegister()
+      # .set(RampModeRegister.bits.MOTION_PROFILE, 2) # S-shaped ramp
+      .set(RampModeRegister.bits.MOTION_PROFILE, 0) # no ramp
+      .set(RampModeRegister.bits.OPERATION_MODE, 1) # positioning mode
+    )
+    # TODO ? self._spi.writeRegister(registers.TMC4361_SH_RAMP_MODE_REGISTER, RAMP_MODE_POSITIONING_MODE | RAMP_MODE_NO_RAMP)
 
-    self._spi.writeRegister(registers.TMC4361_CLK_FREQ_REGISTER, CLOCK_FREQUENCY)
+    # self._spi.writeRegister(registers.TMC4361_CLK_FREQ_REGISTER, CLOCK_FREQUENCY)
+    self._spi.write(ExternalClockFrequencyRegister(CLOCK_FREQUENCY))
+
     # NEEDED so THAT THE SQUIRREL CAN RECOMPUTE EVERYTHING!
     # self._spi.writeRegister(registers.TMC4361_START_DELAY_REGISTER, 512)
     self.set_motor_steps_per_rev(self._steps_per_revolution)
@@ -143,11 +158,15 @@ class TMC4361:
   def set_motor_steps_per_rev(self, steps_per_rev):
     self._motor_steps_per_rev = steps_per_rev
     # Configure the motor type
-    # FIXME dont asume 256 microsteps
+    # FIXME dont asume 0 microsteps
     # unsigned long motorconfig
-    motorconfig = 0x00 # we want 256 microsteps
-    motorconfig |= steps_per_rev << 4
-    self._spi.writeRegister(registers.TMC4361_STEP_CONF_REGISTER, motorconfig)
+    # motorconfig = 0x00 # we want 256 microsteps
+    # motorconfig |= steps_per_rev << 4
+    # self._spi.writeRegister(registers.TMC4361_STEP_CONF_REGISTER, motorconfig)
+    self._spi.write(MotorDriverSettingsRegister()
+      .set(MotorDriverSettingsRegister.bits.MSTEP_PER_FS, 8) # full stepping
+      .set(MotorDriverSettingsRegister.bits.FS_PER_REV, 200) # 1.8 degree per step
+    )
 
   # TODO const char homeMotorTMC4361
 

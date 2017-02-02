@@ -56,3 +56,14 @@ class SPI(activator_spi.SPI):
     i_datagram = self.transfer(message)
 
     return i_datagram
+
+  def write(self, datagram):
+    return datagram.as_response(
+      self.transfer(datagram.set_write().to_list()) )
+
+  def read(self, datagram):
+    datagram.set_read()
+    # Per docs, we always send payload data == 0
+    self.transfer([datagram.header, 0, 0, 0, 0])
+    return datagram.as_response(
+      self.transfer([datagram.header, 0, 0, 0, 0]) )
