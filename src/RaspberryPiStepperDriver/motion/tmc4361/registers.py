@@ -1,9 +1,13 @@
 """
 registers for TMC4361
 """
+import functools
 from RaspberryPiStepperDriver import set_bit, unset_bit, lsb
 from RaspberryPiStepperDriver.motion.tmc4361 import _BV
 from RaspberryPiStepperDriver.motion.tmc4361.io import Datagram
+
+def mask(begin, end):
+  return functools.reduce(lambda a,b: a+b, [2**i for i in range(begin, end+1)])
 
 WRITE_MASK = 0x80 # register | WRITE_MASK
 READ_MASK = 0x7F # register & READ_MASK
@@ -63,47 +67,6 @@ TMC4361_START_CONFIG_REGISTER = 0x2
 TMC4361_INPUT_FILTER_REGISTER = 0x3
 
 # SPI Output Configuration Register
-# RW. Bit 3:0. spi_output_format
-#   0 SPI output interface is off.
-#   1 SPI output interface is connected with a SPI-DAC. SPI output values are mapped to full amplitude:
-#     Current=0  VCC/2
-#     Current=-max  0
-#     Current=max  VCC
-#   2 SPI output interface is connected with a SPI-DAC. SPI output values are absolute
-#     values. Phase of coilA is forwarded via STPOUT, whereas phase of coilB is
-#     forwarded via DIROUT. Phase bit = 0:positive value.
-#   3 SPI output interface is connected with a SPI-DAC. SPI output values are absolute
-#     values. Phase of coilA is forwarded via STPOUT, whereas phase of coilB is
-#     forwarded via DIROUT. Phase bit = 0: negative value.
-#   4 The actual unsigned scaling factor is forwarded via SPI output interface.
-#   5 Both actual signed current values CURRENTA and CURRENTB are forwarded in
-#     one datagram via SPI output interface.
-#   6 SPI output interface is connected with a SPI-DAC. The actual unsigned scaling
-#     factor is merged with DAC_ADDR_A value to an output datagram.
-#   8 SPI output interface is connected with a TMC23x stepper motor driver.
-#   9 SPI output interface is connected with a TMC24x stepper motor driver.
-#  10 SPI output interface is connected with a TMC26x/389 stepper motor driver.
-#     Configuration and current data are transferred to the stepper motor driver.
-#  11 SPI output interface is connected with a TMC26x stepper motor driver. Only
-#     configuration data is transferred to the stepper motor driver. S/D output interface
-#     provides steps.
-#  12 SPI output interface is connected with a TMC2130 stepper motor driver. Only
-#     configuration data is transferred to the stepper motor driver. S/D output interface
-#     provides steps.
-#  13 SPI output interface is connected with a TMC2130 stepper motor driver.
-#     Configuration and current data are transferred to the stepper motor driver.
-#  15 Only cover datagrams are transferred via SPI output interface.
-# Bit 19:13. COVER_DATA_LENGTH
-#   U Number of bits for the complete datagram length. Maximum value = 64
-#     Set to 0 in case a TMC stepper motor driver is selected. The datagram length is then
-#     selected automatically.
-# Bits 23:20. SPI_OUT_LOW_TIME
-#   U Number of clock cycles the SPI output clock remains at low level.
-# Bits 27:24. SPI_OUT_HIGH_TIME
-#   U Number of clock cycles the SPI output clock remains at high level
-# Bits 31:28. SPI_OUT_BLOCK_TIME
-#   U Number of clock cycles the NSCSDRV output remains high (inactive) after a SPI
-#     output transmission
 TMC4361_SPIOUT_CONF_REGISTER = 0x04
 
 TMC4361_ENCODER_INPUT_CONFIG_REGISTER = 0x07
@@ -119,81 +82,9 @@ TMC4361_EVENT_CLEAR_CONF_REGISTER = 0x0c
 TMC4361_INTERRUPT_CONFIG_REGISTER = 0x0d
 
 # Status Event Register
-# 0 TARGET_REACHED has been triggered.
-# 1 POS_COMP_REACHED has been triggered.
-# 2 VEL_REACHED has been triggered.
-# 3 VEL_STATE = b’00 has been triggered (VACTUAL = 0).
-# 4 VEL_STATE = b’01 has been triggered (VACTUAL > 0).
-# 5 VEL_STATE = b’10 has been triggered (VACTUAL < 0).
-# 6 RAMP_STATE = b’00 has been triggered (AACTUAL = 0, VACTUAL is constant).
-# 7 RAMP_STATE = b’01 has been triggered (|VACTUAL| increases).
-# 8 RAMP_STATE = b’10 has been triggered (|VACTUAL| increases).
-# 9 MAX_PHASE_TRAP: Trapezoidal ramp has reached its limit speed using maximum values for AMAX or DMAX (|VACTUAL| > VBREAK; VBREAK≠0).
-# 10 FROZEN: NFREEZE has switched to low level. i Reset TMC4361A for further motion.
-# 11 STOPL has been triggered. Motion in negative direction is not executed until this event is cleared and (STOPL is not active any more or stop_left_en is set to 0).
-# 12 STOPR has been triggered. Motion in positive direction is not executed until this event is cleared and (STOPR is not active any more or stop_right_en is set to 0).
-# 13 VSTOPL_ACTIVE: VSTOPL has been activated. No further motion in negative direction until this event is cleared and (a new value is chosen for VSTOPL or virtual_left_limit_en is set to 0).
-# 14 VSTOPR_ACTIVE: VSTOPR has been activated. No further motion in positive direction until this event is cleared and (a new value is chosen for VSTOPR or virtual_right_limit_en is set to 0).
-# 15 HOME_ERROR: Unmatched HOME_REF polarity and HOME is outside of safety margin.
-# 16 XLATCH_DONE indicates if X_LATCH was rewritten or homing process has been completed.
-# 17 FS_ACTIVE: Fullstep motion has been activated.
-# 18 ENC_FAIL: Mismatch between XACTUAL and ENC_POS has exceeded specified limit.
-# 19 N_ACTIVE: N event has been activated.
-# 20 ENC_DONE indicates if ENC_LATCH was rewritten.
-# 21 SER_ENC_DATA_FAIL: Failure during multi-cycle data evaluation or between two consecutive data requests has occured.
-# 22 Reserved.
-# 23 SER_DATA_DONE: Configuration data was received from serial SPI encoder.
-# 24 One of the SERIAL_ENC_Flags was set.
-# 25 COVER_DONE: SPI datagram was sent to the motor driver.
-# 26 ENC_VEL0: Encoder velocity has reached 0.
-# 27 CL_MAX: Closed-loop commutation angle has reached maximum value.
-# 28 CL_FIT: Closed-loop deviation has reached inner limit.
-# 29 STOP_ON_STALL: Motor stall detected. Motor ramp has stopped.
-# 30 MOTOR_EV: One of the selected TMC motor driver flags was triggered.
-# 31 RST_EV: Reset was triggered.
 TMC4361_EVENTS_REGISTER = 0x0e
 
 # Status Flag Register
-# 0 TARGET_REACHED_F is set high if XACTUAL = XTARGET
-# 1 POS_COMP_REACHED_F is set high if XACTUAL = POS_COMP
-# 2 VEL_REACHED_F is set high if VACTUAL = |VMAX|
-# 4:3 VEL_STATE_F: Current velocity state: 0  VACTUAL = 0;
-#   1  VACTUAL > 0;
-#   2  VACTUAL < 0
-# 6:5 RAMP_STATE_F: Current ramp state: 0  AACTUAL = 0;
-#   1  AACTUAL increases (acceleration);
-#   2  AACTUAL decreases (deceleration)
-# 7 STOPL_ACTIVE_F: Left stop switch is active.
-# 8 STOPR_ACTIVE_F: Right stop switch is active.
-# 9 VSTOPL_ACTIVE_F: Left virtual stop switch is active.
-# 10 VSTOPR_ACTIVE_F: Right virtual stop switch is active.
-# 11 ACTIVE_STALL_F: Motor stall is detected and VACTUAL > VSTALL_LIMIT.
-# 12 HOME_ERROR_F: HOME_REF input signal level is not equal to expected home level.
-# 13 FS_ACTIVE_F: Fullstep operation is active.
-# 14 ENC_FAIL_F: Mismatch between XACTUAL and ENC_POS is out of tolerated range.
-# 15 N_ACTIVE_F: N event is active.
-# 16 ENC_LATCH_F: ENC_LATCH is rewritten.
-# 17 Applies to absolute encoders only:
-#    MULTI_CYCLE_FAIL_F indicates a failure during last multi cycle data evaluation.
-#    Applies to absolute encoders only:
-#    SER_ENC_VAR_F indicates a failure during last serial data evaluation due to a substantial
-#    deviation between two consecutive serial data values.
-# 18 Reserved.
-# 19 CL_FIT_F: Active if ENC_POS_DEV < CL_TOLERANCE. The current mismatch between XACTUAL and ENC_POS is within tolerated range.
-# 23:20 Applies to absolute encoders only: SERIAL_ENC_FLAGS received from encoder. These flags are reset with a new encoder transfer request.
-# 24 TMC26x / TMC2130 only: SG: StallGuard2 status
-#    Optional for TMC24x only: Calculated stallGuard status.
-#    TMC23x / TMC24x only: UV_SF: Undervoltage flag.
-# 25 All TMC motor drivers: OT: Overtemperature shutdown.
-# 26 All TMC motor drivers: OTPW: Overtemperature warning.
-# 27 TMC26x / TMC2130 only: S2GA: Short to ground detection bit for high side MOSFE of coil A.
-#    TMC23x / TMC24x only: OCA: Overcurrent bridge A.
-# 28 TMC26x / TMC2130 only: S2GB: Short to ground detection bit for high side MOSFET of coil B.
-#    TMC23x / TMC24x only: OCB: Overcurrent bridge B.
-# 29 All TMC motor drivers: OLA: Open load indicator of coil A.
-# 30 All TMC motor drivers: OLB: Open load indicator of coil B.
-# 31 TMC26x / TMC2130 only: STST: Standstill indicator.
-#    TMC23x / TMC24x only: OCHS: Overcurrent high side.
 TMC4361_STATUS_REGISTER = 0x0f
 
 # Various Configuration Registers: S/D, Synchronization, etc.
@@ -269,12 +160,6 @@ TMC4361_SH_BOW_4_REGISTER = 0x4B
 TMC4361_SH_RAMP_MODE_REGISTER = 0x4C
 
 # Reset and Clock Gating Register
-# RW. Bit 2:0. CLK_GATING_REG
-#   0 Clock gating is not activated.
-#   7 Clock gating is activated.
-# Bits 31:8. RESET_REG
-#  0 No reset is activated.
-#  0x525354 Internal reset is activated.
 TMC4361_RESET_CLK_GATING_REGISTER = 0x4F
 
 TMC4361_ENCODER_POSITION_REGISTER = 0x50
@@ -447,7 +332,7 @@ class GeneralConfigurationRegister(Register):
     # 1 An absolute SSI encoder is connected to encoder interface.
     # 2 Reserved
     # 3 An absolute SPI encoder is connected to encoder interface
-    'SERIAL_ENC_IN_MODE': _BV(11) | _BV(10),
+    'SERIAL_ENC_IN_MODE': mask(10, 11),
     # 0 Differential encoder interface inputs enabled.
     # 1 Differential encoder interface inputs is disabled (automatically set for SPI encoder).
     'DIFF_ENC_IN_DISABLE': _BV(12),
@@ -455,7 +340,7 @@ class GeneralConfigurationRegister(Register):
     # 1 Standby signal becomes forwarded with an active high level at STDBY_CLK output.
     # 2 STDBY_CLK passes ChopSync clock (TMC23x, TMC24x stepper motor drivers only).
     # 3 Internal clock is forwarded to STDBY_CLK output pin.
-    'STDBY_CLK_PIN_ASSIGNMENT': _BV(14) | _BV(13),
+    'STDBY_CLK_PIN_ASSIGNMENT': mask(13, 14),
     # 0 INTR=0 indicates an active interrupt.
     # 1 INTR=1 indicates an active interrupt.
     'INTR_POL': _BV(15),
@@ -481,7 +366,7 @@ class GeneralConfigurationRegister(Register):
     #   TMC26x config: use const_toff-Chopper (CHM = 1);
     #   slow decay only (HSTRRT = 0);
     #   TST = 1 and SGT0=SGT1=1 (on_state_xy).
-    'DCSTEP_MODE': _BV(22) | _BV(21),
+    'DCSTEP_MODE': mask(21, 22),
     # 0 PWM output is disabled. Step/Dir output is enabled at STPOUT/DIROUT.
     # 1 STPOUT/DIROUT output pins are used as PWM output (PWMA/PWMB).
     'PWM_OUT_EN': _BV(23),
@@ -521,7 +406,7 @@ class RampModeRegister(Register):
     #   0: No ramp: VACTUAL follows only VMAX (rectangle velocity shape).
     #   1: Trapezoidal ramp (incl. sixPoint ramp): Consideration of acceleration and deceleration values for generating VACTUAL without adapting the acceleration values.
     #   2: S-shaped ramp: Consideration of all ramp values (incl. bow values) for generating VACTUAL.
-    'MOTION_PROFILE': _BV(0) | _BV(1),
+    'MOTION_PROFILE': mask(0, 1),
     # Bit 2: Operation Mode:
     #   1 Positioning mode: XTARGET is superior target of velocity ramp.
     #   0 Velocitiy mode: VMAX is superior target of velocity ramp.
@@ -532,13 +417,13 @@ class ExternalClockFrequencyRegister(Register):
   REGISTER = TMC4361_CLK_FREQ_REGISTER
   bits = AttributeDict({
     # RW. External clock frequency fCLK; unsigned; 25 bits.
-    'EXTERNAL_CLOCK_FREQUENCY': 0b1111111111111111111111111
+    'EXTERNAL_CLOCK_FREQUENCY': mask(0, 24)
   })
 
 class MotorDriverSettingsRegister(Register):
   REGISTER = TMC4361_STEP_CONF_REGISTER
   bits = AttributeDict({
-    # Highest microsteps resolution: 256 microsteps per fullstep.
+    # 3:0 Highest microsteps resolution: 256 microsteps per fullstep.
     # Set to 256 for closed-loop operation.
     # When using a Step/Dir driver, it must be capable of a 256 resolution via
     # Step/Dir input for best performance (but lower resolution Step/Dir drivers
@@ -551,12 +436,234 @@ class MotorDriverSettingsRegister(Register):
     # 6 4 microsteps per fullstep.
     # 7 Halfsteps: 2 microsteps per fullstep.
     # 8 Full steps (maximum possible setting)
-    'MSTEP_PER_FS': 0b1111,
-    # Fullsteps per motor axis revolution
-    'FS_PER_REV': 0b0000111111111111,
-    # Selection of motor driver status bits for SPI response datagrams: ORed
+    'MSTEP_PER_FS': mask(0, 3),
+    # 15:4 Fullsteps per motor axis revolution
+    'FS_PER_REV': mask(4, 15),
+    # 23:16 Selection of motor driver status bits for SPI response datagrams: ORed
     # with Motor Driver Status Register Set (7:0): if set here and a particular
     # flag is set from the motor stepper driver, an event will be generated at EVENTS(30)
-    'MSTATUS_SELECTION': 0b000000000000000011111111
+    'MSTATUS_SELECTION': mask(16, 23)
     # 31:24 Reserved. Set to 0x00.
+  })
+
+class StatusFlagRegister(Register):
+  REGISTER = TMC4361_STATUS_REGISTER
+  bits = AttributeDict({
+    # 0 TARGET_REACHED_F is set high if XACTUAL = XTARGET
+    'TARGET_REACHED_F': _BV(0),
+    # 1 POS_COMP_REACHED_F is set high if XACTUAL = POS_COMP
+    'POS_COMP_REACHED_F': _BV(1),
+    # 2 VEL_REACHED_F is set high if VACTUAL = |VMAX|
+    'VEL_REACHED_F': _BV(2),
+    # 4:3 VEL_STATE_F: Current velocity state: 0  VACTUAL = 0;
+    #   1  VACTUAL > 0;
+    #   2  VACTUAL < 0
+    'VEL_STATE_F': mask(3, 4),
+    # 6:5 RAMP_STATE_F: Current ramp state: 0  AACTUAL = 0;
+    #   1  AACTUAL increases (acceleration);
+    #   2  AACTUAL decreases (deceleration)
+    'RAMP_STATE_F': mask(5, 6),
+    # 7 STOPL_ACTIVE_F: Left stop switch is active.
+    'STOPL_ACTIVE_F': _BV(7),
+    # 8 STOPR_ACTIVE_F: Right stop switch is active.
+    'STOPR_ACTIVE_F': _BV(8),
+    # 9 VSTOPL_ACTIVE_F: Left virtual stop switch is active.
+    'VSTOPL_ACTIVE_F': _BV(9),
+    # 10 VSTOPR_ACTIVE_F: Right virtual stop switch is active.
+    'VSTOPR_ACTIVE_F': _BV(10),
+    # 11 ACTIVE_STALL_F: Motor stall is detected and VACTUAL > VSTALL_LIMIT.
+    'ACTIVE_STALL_F': _BV(11),
+    # 12 HOME_ERROR_F: HOME_REF input signal level is not equal to expected home level.
+    'HOME_ERROR_F': _BV(12),
+    # 13 FS_ACTIVE_F: Fullstep operation is active.
+    'FS_ACTIVE_F': _BV(13),
+    # 14 ENC_FAIL_F: Mismatch between XACTUAL and ENC_POS is out of tolerated range.
+    'ENC_FAIL_F': _BV(14),
+    # 15 N_ACTIVE_F: N event is active.
+    'N_ACTIVE_F': _BV(15),
+    # 16 ENC_LATCH_F: ENC_LATCH is rewritten.
+    'ENC_LATCH_F': _BV(16),
+    # 17 Applies to absolute encoders only:
+    #    MULTI_CYCLE_FAIL_F indicates a failure during last multi cycle data evaluation.
+    #    Applies to absolute encoders only:
+    #    SER_ENC_VAR_F indicates a failure during last serial data evaluation due to a substantial
+    #    deviation between two consecutive serial data values.
+    # TODO '': _BV(),
+    # 18 Reserved.
+    # 19 CL_FIT_F: Active if ENC_POS_DEV < CL_TOLERANCE. The current mismatch
+    #    between XACTUAL and ENC_POS is within tolerated range.
+    'CL_FIT_F': _BV(19),
+    # 23:20 Applies to absolute encoders only: SERIAL_ENC_FLAGS received from
+    #   encoder. These flags are reset with a new encoder transfer request.
+    'SERIAL_ENC_FLAGS': mask(20, 23),
+    # 24 TMC26x / TMC2130 only: SG: StallGuard2 status
+    #    Optional for TMC24x only: Calculated stallGuard status.
+    #    TMC23x / TMC24x only: UV_SF: Undervoltage flag.
+    'SG_OR_UV_SF': _BV(24),
+    # 25 All TMC motor drivers: OT: Overtemperature shutdown.
+    'OT_SHUTDOWN_F': _BV(25),
+    # 26 All TMC motor drivers: OTPW: Overtemperature warning.
+    'OT_WARNING_F': _BV(26),
+    # 27 TMC26x / TMC2130 only: S2GA: Short to ground detection bit for high side MOSFE of coil A.
+    #    TMC23x / TMC24x only: OCA: Overcurrent bridge A.
+    'S2G_A_OR_OC_A_F': _BV(27),
+    # 28 TMC26x / TMC2130 only: S2GB: Short to ground detection bit for high side MOSFET of coil B.
+    #    TMC23x / TMC24x only: OCB: Overcurrent bridge B.
+    'S2G_B_OR_OC_B_F': _BV(28),
+    # 29 All TMC motor drivers: OLA: Open load indicator of coil A.
+    'OL_A_F': _BV(29),
+    # 30 All TMC motor drivers: OLB: Open load indicator of coil B.
+    'OL_B_F': _BV(30),
+    # 31 TMC26x / TMC2130 only: STST: Standstill indicator.
+    #    TMC23x / TMC24x only: OCHS: Overcurrent high side.
+    'STST_OR_OCHS_F': _BV(31)
+  })
+
+class SPIOutConfRegister(Register):
+  REGISTER = TMC4361_SPIOUT_CONF_REGISTER
+  bits = AttributeDict({
+    # RW. Bit 3:0. spi_output_format
+    #   0 SPI output interface is off.
+    #   1 SPI output interface is connected with a SPI-DAC. SPI output values are mapped to full amplitude:
+    #     Current=0  VCC/2
+    #     Current=-max  0
+    #     Current=max  VCC
+    #   2 SPI output interface is connected with a SPI-DAC. SPI output values are absolute
+    #     values. Phase of coilA is forwarded via STPOUT, whereas phase of coilB is
+    #     forwarded via DIROUT. Phase bit = 0:positive value.
+    #   3 SPI output interface is connected with a SPI-DAC. SPI output values are absolute
+    #     values. Phase of coilA is forwarded via STPOUT, whereas phase of coilB is
+    #     forwarded via DIROUT. Phase bit = 0: negative value.
+    #   4 The actual unsigned scaling factor is forwarded via SPI output interface.
+    #   5 Both actual signed current values CURRENTA and CURRENTB are forwarded in
+    #     one datagram via SPI output interface.
+    #   6 SPI output interface is connected with a SPI-DAC. The actual unsigned scaling
+    #     factor is merged with DAC_ADDR_A value to an output datagram.
+    #   8 SPI output interface is connected with a TMC23x stepper motor driver.
+    #   9 SPI output interface is connected with a TMC24x stepper motor driver.
+    #  10 SPI output interface is connected with a TMC26x/389 stepper motor driver.
+    #     Configuration and current data are transferred to the stepper motor driver.
+    #  11 SPI output interface is connected with a TMC26x stepper motor driver. Only
+    #     configuration data is transferred to the stepper motor driver. S/D output interface
+    #     provides steps.
+    #  12 SPI output interface is connected with a TMC2130 stepper motor driver. Only
+    #     configuration data is transferred to the stepper motor driver. S/D output interface
+    #     provides steps.
+    #  13 SPI output interface is connected with a TMC2130 stepper motor driver.
+    #     Configuration and current data are transferred to the stepper motor driver.
+    #  15 Only cover datagrams are transferred via SPI output interface.
+    'SPI_OUTPUT_FORMAT': mask(0, 3),
+    # 4 (TMC389 only)
+    #   0 A 2-phase stepper motor driver is connected to the SPI output (TMC26x).
+    #   1 A 3-phase stepper motor driver is connected to the SPI output (TMC389)
+    'THREE_PHASE_STEPPER_EN': _BV(4),
+    # 4 (No TMC driver)
+    #   0 NSCSDRV_SDO is tied low before SCKDRV_NSDO to initiate a new data transfer.
+    #   1 SCKDRV_NSDO is tied low before NSCSDRV_SDO to initiate a new data transfer.
+    'SCK_LOW_BEFORE_CSN': _BV(4),
+    # 5:4 (TMC23x/24x only)
+    #   0 Both mixed decay bits are always off.
+    #   1 Mixed decay bits are on during falling ramps until reaching a current value of 0.
+    #   2 Mixed decay bits are always on, except during standstill.
+    #   3 Mixed decay bits are always on.
+    'MIXED_DECAY': mask(4, 5),
+    # 23:4 (Serial encoder output only)
+    #   U Monoflop time for SSI output interface: Delay time [clock cycles] during which the absolute encoder data remain stable after the last master request.
+    'SSI_OUT_MTIME': mask(4, 23),
+    # 5 (TMC26x/2130 in SD mode only)
+    #   0 No transfer of scale values.
+    #   1 Transmission of current scale values to the appropriate driver registers.
+    'SCALE_VAL_TRANSFER_EN': _BV(5),
+    # 5 (No TMC driver)
+    #   0 New value bit at SDODRV_SCLK is assigned at falling edge of SCKDRV_NSDO.
+    #   1 New value bit at SDODRV_SCLK is assigned at rising edge of SCKDRV_NSDO.
+    'NEW_OUT_BIT_AT_RISE': _BV(5),
+    # 6 (TMC24x only)
+    #   0 No standby datagram is sent.
+    #   1 In case of a Stop-on-Stall event, a standby datagram is sent to the TMC24x.
+    'STDBY_ON_STALL_FOR_24X': _BV(6),
+    # 6 (TMC26x/2130 in SD mode only)
+    #   0 Permanent transfer of polling datagrams to check driver status.
+    #   1 No transfer of polling datagrams.
+    'DISABLE_POLLING': _BV(6),
+    # 7 (TMC24x only)
+    #   0 Undervoltage flag of TMC24x is mapped at STATUS(24).
+    #   1 Calculated stall status of TMC24x is forwarded at STATUS(24).
+    'STALL_FLAG_INSTEAD_OF_UV_EN': _BV(7),
+    # 7 (TMC26x/2130 only)
+    #   0 No automatic continuous streaming of cover datagrams.
+    #   1 Enabling of automatic continuous streaming of cover datagrams.
+    'AUTOREPEAT_COVER_EN': _BV(7),
+    # 11:7  (SPI-DAC only)
+    # U Number of bits for command address.
+    # 12 Reserved. Set to 0.
+    'DAC_CMD_LENGTH': mask(7, 11),
+    # 10:8 (TMC24x only)
+    #   U A stall is detected if the stall limit value STALL_LOAD_LIMIT is higher than the combination of the load bits (LD2&LD1&LD0).
+    'STALL_LOAD_LIMIT': mask(8, 10),
+    # 11:8 (TMC26x in SD mode only, TMC2130 only)
+    #   U Multiplier for calculating the time interval between two consecutive polling datagrams: tPOLL = 2^POLL_BLOCK_EXP ∙ SPI_OUT_BLOCK_TIME / fCLK
+    'POLL_BLOCK_EXP': mask(8, 11),
+    # 11 (TMC24x only)
+    #   0 No phase shift during PWM mode.
+    #   1 During PWM mode, the internal SinLUT microstep position MSCNT is shifted to MS_OFFSET microsteps. Consequently, the sine/cosine values have a phase shift of (MS_OFFSET / 1024 ∙ 360°)
+    'PWM_PHASE_SHFT_EN': _BV(11),
+    # 12 (TMC23x/24x only)
+    #   0 ChopSync frequency remains stable during standby.
+    #   1 CHOP_SYNC_DIV is halfed during standby.
+    'DOUBLE_FREQ_AT_STDBY': _BV(12),
+    # 12 (TMC26x/2130 only)
+    #   0 COVER_DONE event is set for every datagram that is sent to the motor driver.
+    #   1 COVER_DONE event is only set for cover datagrams sent to the motor driver.
+    'COVER_DONE_ONLY_FOR_COVER': _BV(12),
+    # Bit 19:13. COVER_DATA_LENGTH
+    #   U Number of bits for the complete datagram length. Maximum value = 64
+    #     Set to 0 in case a TMC stepper motor driver is selected. The datagram length is then
+    #     selected automatically.
+    'COVER_DATA_LENGTH': mask(13, 19),
+    # Bits 23:20. SPI_OUT_LOW_TIME
+    #   U Number of clock cycles the SPI output clock remains at low level.
+    'SPI_OUT_LOW_TIME': mask(20, 23),
+    # Bits 27:24. SPI_OUT_HIGH_TIME
+    #   U Number of clock cycles the SPI output clock remains at high level
+    'SPI_OUT_HIGH_TIME': mask(24, 27),
+    # Bits 31:28. SPI_OUT_BLOCK_TIME
+    #   U Number of clock cycles the NSCSDRV output remains high (inactive) after a SPI
+    #     output transmission
+    'SPI_OUT_BLOCK_TIME': mask(28, 31)
+  })
+
+class CoverLowRegister(Register):
+  """
+  This register is write-only COVER_LOW and read-only POLLING_STATUS.
+  """
+  REGISTER = TMC4361_COVER_LOW_REGISTER
+  bits = AttributeDict({
+    'COVER_LOW_OR_POLLING_STATUS': mask(0, 31)
+  })
+
+class CoverDriverLowRegister(Register):
+  """
+  Lower configuration bits of SPI response received from the motor driver connected to
+  the SPI output.
+  """
+  REGISTER = TMC4361_COVER_DRV_LOW_REGISTER
+  bits = AttributeDict({
+    # 31:0 (Default:0x00000000)
+    # Lower configuration bits of SPI response received from the motor driver
+    # connected to the SPI output.
+    'COVER_DRV_LOW': mask(0, 31)
+  })
+
+class ResetClockAndGatingRegister(Register):
+  REGISTER = TMC4361_RESET_CLK_GATING_REGISTER
+  bits = AttributeDict({
+    # RW. Bit 2:0.
+    #   0 Clock gating is not activated.
+    #   7 Clock gating is activated.
+    'CLK_GATING_REG': mask(0, 2),
+    # Bits 31:8.
+    #  0 No reset is activated.
+    #  0x525354 Internal reset is activated.
+    'RESET_REG': mask(8, 31)
   })

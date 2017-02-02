@@ -2,6 +2,9 @@
 
 export PYTHONPATH=$PWD/src:$PWD/test/mock
 
+gpio mode 7 clock
+gpio clock 7 1600000
+
 python3 test/test_accel_profile.py
 python3 test/test_max_profile.py
 python3 test/test_rampprofile.py

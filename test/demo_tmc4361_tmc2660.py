@@ -6,7 +6,8 @@ from RaspberryPiStepperDriver.profiles.rectangle import RectangleProfile
 from RaspberryPiStepperDriver.motion.tmc4361.driver import *
 from RaspberryPiStepperDriver.motion.tmc4361.spi import SPI as TMC4361SPI
 
-logging.config.fileConfig('logging.ini')
+# logging.config.fileConfig('logging.ini')
+logging.basicConfig(level=logging.INFO)
 log = logging.getLogger(__name__)
 
 spi1 = TMC4361SPI(bus=0, device=1)
@@ -40,16 +41,17 @@ tmc4361.start()
 
 tmc4361.enable_tmc26x()
 
+# print(tmc4361.transfer_to_tmc2660(0x901B4).data)
+# print(tmc4361.transfer_to_tmc2660(0x94557).data)
+# print(tmc4361.transfer_to_tmc2660(0xD001F).data)
+# print(tmc4361.transfer_to_tmc2660(0xE0010).data)
+# print(tmc4361.transfer_to_tmc2660(0x00000).data)
+# print(tmc4361.transfer_to_tmc2660(0xA8202).data)
+
 tmc4361.move_to(10000)
 
-# print(tmc4361.transfer_to_tmc2660(0x901B4))
-# print(tmc4361.transfer_to_tmc2660(0x94557))
-# print(tmc4361.transfer_to_tmc2660(0xD001F))
-# print(tmc4361.transfer_to_tmc2660(0xE0010))
-# print(tmc4361.transfer_to_tmc2660(0x00000))
-
 try:
-  for i in range(0,100):
+  for i in range(0,10):
     print('Report for iteration', i)
     print('    get_status_events', tmc4361.get_status_events())
     print('    get_status_flags', tmc4361.get_status_flags())
@@ -57,9 +59,9 @@ try:
     print('    get_target_position', tmc4361.get_target_position())
     print('    get_current_position', tmc4361.get_current_position())
     print('    get_target_speed', tmc4361.get_target_speed())
-    print('    STATUS_EVENT_COVER_DONE', STATUS_EVENT_COVER_DONE in tmc4361.get_status_events())
-    print('    ping', tmc4361.transfer_to_tmc2660(0b11100000000000000000))
-    sleep_microseconds(1000)
+    print('    get_tmc2660_response', tmc4361.get_tmc2660_response().data)
+    # print('    transfer_to_tmc2660', tmc4361.transfer_to_tmc2660(0b00000000000000000000).data)
+    sleep_microseconds(500000)
 except Exception as e:
   print(e)
 finally:

@@ -1,7 +1,10 @@
+import logging
 import RPi.GPIO as GPIO
 from RaspberryPiStepperDriver import sleep_microseconds, tobin, set_bit, unset_bit, datagram_to_int
 from RaspberryPiStepperDriver.motion.tmc4361.registers import *
 from . import registers, _BV
+
+log = logging.getLogger(__name__)
 
 # TODO different from standard values
 DIRECTION_CW = 1
@@ -241,25 +244,13 @@ class TMC4361:
     return value
 
   def get_status_flags(self):
-    parsed_datagram = self._spi.readRegister(registers.TMC4361_STATUS_REGISTER)
-    datagram = datagram_to_int(parsed_datagram[1:])
-    out = []
-    for i in range(0,31):
-      if datagram & _BV(i):
-        out.append(_BV(i))
-    return out
+    return self._spi.read(StatusFlagRegister()).get_values()
 
   def get_status_events(self):
     """
     Read and parse the Status Event Register (EVENTS 0x0E).
     """
-    parsed_datagram = self._spi.readRegister(registers.TMC4361_EVENTS_REGISTER)
-    datagram = datagram_to_int(parsed_datagram[1:])
-    out = []
-    for i in range(0,31):
-      if datagram & _BV(i):
-        out.append(_BV(i))
-    return out
+    return self._spi.read(StatusEventRegister()).get_values()
 
   def configureEndstop(self, left, active_high):
     """
@@ -340,60 +331,59 @@ class TMC4361:
       GPIO.output(self._reset_pin, GPIO.HIGH)
     else:
       # FIXME soft reset doesnt seem to work
-      # Do software reset by setting RESET_REG = 0x525354 (Bits31:8 of register 0x4F)
-      rst = 0x525354
-      rst = rst << 8
-      out = self._spi.writeRegister(registers.TMC4361_RESET_CLK_GATING_REGISTER, rst)
-      # print(bin(out[0]))
-      # print(self._spi.readRegister(registers.TMC4361_RESET_CLK_GATING_REGISTER))
-      # print('resetting')
-      # print(STATUS_EVENT_RST_EV in self.get_status_events())
+      self._spi.write(ResetClockAndGatingRegister()
+        .set(ResetClockAndGatingRegister.bits.RESET_REG, 0x525354) )
 
   def enable_tmc26x(self):
     """
     Enable special support for TCM26x drivers.
     See section 10.6 in the TMC4361 datasheet.
     """
-    # autorepeat_cover_en
-    datagram = 0 | _BV(7)
-    datagram = datagram | SPI_OUT_CONFIG_TMC26X_SPI
+    # TMC_260_CONFIG 0x8440000a //SPI-Out: block/low/high_time=8/4/4 Takte; CoverLength=autom; TMC26x
+    self._spi.write(SPIOutConfRegister()
+      .set(SPIOutConfRegister.bits.SPI_OUTPUT_FORMAT, 10)
+      .set(SPIOutConfRegister.bits.COVER_DATA_LENGTH, 0)
+      .set(SPIOutConfRegister.bits.AUTOREPEAT_COVER_EN)
+      .set(SPIOutConfRegister.bits.SPI_OUT_LOW_TIME, 4)
+      .set(SPIOutConfRegister.bits.SPI_OUT_HIGH_TIME, 4)
+      .set(SPIOutConfRegister.bits.SPI_OUT_BLOCK_TIME, 8)
+    )
 
-    """
-    Set the number of internal clock cycles the serial clock should stay low at
-    SPI_OUT_LOW_TIME = SPIOUT_CONF (23:20).
-     Set the number of internal clock cycles the serial clock should stay high at
-    SPI_OUT_HIGH_TIME = SPIOUT_CONF (27:24).
-     Also, an SPI_OUT_BLOCK_TIME = SPIOUT_CONF(31:28) can be set for a
-    minimum time period during which no new datagram is sent after the last SPI
-    output datagram.
-    """
-    spi_out_block_time = 2 # clock cycles
-    spi_out_low_time = 2 # clock cycles
-    spi_out_high_time = 2 # clock cycles
-    datagram = spi_out_block_time << 28
-    datagram |= spi_out_high_time << 24
-    datagram |= spi_out_low_time << 20
-    datagram |= SPI_OUT_CONFIG_TMC26X_SD
-    self._spi.writeRegister(registers.TMC4361_SPIOUT_CONF_REGISTER, datagram)
+    # set260Register(motor_number,motors[motor_number].tmc260.getDriverControlRegisterValue());
+    # set260Register(motor_number,motors[motor_number].tmc260.getChopperConfigRegisterValue());
+    # set260Register(motor_number,motors[motor_number].tmc260.getStallGuard2RegisterValue());
+    # set260Register(motor_number,motors[motor_number].tmc260.getDriverConfigurationRegisterValue() | 0x80);
+
+    # TMC26X register definitions
+    # DRIVER_CONTROL_REGISTER = 0x0
+    # CHOPPER_CONFIG_REGISTER = 0x80000
+    # COOL_STEP_REGISTER = 0xA0000
+    # STALL_GUARD2_LOAD_MEASURE_REGISTER = 0xC0000
+    # DRIVER_CONFIG_REGISTER = 0xE0000
+    # READ_STALL_GUARD_READING = 0x10
+    # # setting the default register values
+    # driver_control_register_value = DRIVER_CONTROL_REGISTER | 0x3 # 32th microstepping
+    # self.transfer_to_tmc2660(driver_control_register_value)
+    # # microsteps = (1 << INITIAL_MICROSTEPPING)
+    # chopper_config_register = CHOPPER_CONFIG_REGISTER
+    # self.transfer_to_tmc2660(chopper_config_register)
+    # cool_step_register_value = COOL_STEP_REGISTER
+    # self.transfer_to_tmc2660(cool_step_register_value)
+    # stall_guard2_current_register_value = STALL_GUARD2_LOAD_MEASURE_REGISTER
+    # self.transfer_to_tmc2660(stall_guard2_current_register_value)
+    # driver_configuration_register_value = DRIVER_CONFIG_REGISTER | READ_STALL_GUARD_READING
+    # self.transfer_to_tmc2660(driver_configuration_register_value)
+
+  def disable_tmc26x(self):
+    pass
 
   def transfer_to_tmc2660(self, datagram):
     """
     Datagram should be 20 bits.
     """
-    spiout_conf = self._spi.readRegister(registers.TMC4361_SPIOUT_CONF_REGISTER)
-    spiout_conf = datagram_to_int(spiout_conf[1:])
-    cover_data_length = 20
-    new_spiout_conf = spiout_conf | ( cover_data_length << 13 )
-    print('spiout_conf', bin(spiout_conf), '->', bin(new_spiout_conf))
-
-    # donk = ( new_spiout_conf & ( 0b111111 << 13 ) ) >> 13
-    # print('donk', donk)
-
-    self._spi.writeRegister(registers.TMC4361_SPIOUT_CONF_REGISTER, new_spiout_conf)
-
-    self._spi.writeRegister(registers.TMC4361_COVER_LOW_REGISTER, datagram)
-    resp = self._spi.readRegister(registers.TMC4361_COVER_DRV_LOW_REGISTER)
-
-    self._spi.writeRegister(registers.TMC4361_SPIOUT_CONF_REGISTER, spiout_conf)
-
+    self._spi.write(CoverLowRegister(datagram))
+    resp = self._spi.read(CoverDriverLowRegister())
     return resp
+
+  def get_tmc2660_response(self):
+    return self._spi.read(CoverDriverLowRegister())

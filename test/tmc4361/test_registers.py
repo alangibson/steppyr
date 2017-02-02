@@ -1,5 +1,5 @@
 import unittest
-from RaspberryPiStepperDriver.motion.tmc4361.registers import \
+from RaspberryPiStepperDriver.motion.tmc4361.registers import mask, \
   StatusEventRegister, SpiStatusSelectionRegister, ExternalClockFrequencyRegister
 
 class TestRegisters(unittest.TestCase):
@@ -36,6 +36,9 @@ class TestRegisters(unittest.TestCase):
     register = ExternalClockFrequencyRegister()
     register.set(ExternalClockFrequencyRegister.bits.EXTERNAL_CLOCK_FREQUENCY, 16000000)
     self.assertEqual(register.data, 16000000)
+
+  def test_mask(self):
+    self.assertEqual(mask(5, 6), 0b1100000)
 
 if __name__ == '__main__':
   unittest.main()
