@@ -18,6 +18,52 @@ RAMP_MODE_VELOCITY_MODE = 0b000
 RAMP_MODE_NO_RAMP = 0b000
 RAMP_MODE_TRAPEZOIDAL_RAMP = 0b001
 RAMP_MODE_S_SHAPED_RAMP = 0b010
+# General Conf Register
+GENERAL_CONF_SERIAL_ENC_OUT_ENABLE = _BV(24)
+# Start Switch Configuration Register
+START_CONFIG_START_EN_NONE = 0b00000
+START_CONFIG_TRIGGER_EVENTS_DISABLED = 0b0000
+START_CONFIG_TRIGGER_EVENTS_START_PIN_OUTPUT = 0b0000
+START_CONFIG_TRIGGER_EVENTS_START_PIN_TRIGGER = 0b0001
+START_CONFIG_TRIGGER_EVENTS_TARGET_REACHED_TRIGGER = 0b0010
+START_CONFIG_TRIGGER_EVENTS_VELOCITY_REACHED_TRIGGER = 0b0100
+START_CONFIG_TRIGGER_EVENTS_POSCOMP_REACHED_TRIGGER = 0b1000
+# Status Event Register
+STATUS_EVENT_TARGET_REACHED = _BV(0)
+STATUS_EVENT_POS_COMP_REACHED = _BV(1)
+STATUS_EVENT_VEL_REACHED = _BV(2)
+# TODO finish these
+STATUS_EVENT_COVER_DONE = _BV(25)
+# TODO finish these
+STATUS_EVENT_RST_EV = _BV(31)
+# Status Flag Register
+STATUS_FLAG_TARGET_REACHED_F = _BV(0)
+STATUS_FLAG_POS_COMP_REACHED_F = _BV(1)
+STATUS_FLAG_VEL_REACHED_F = _BV(3)
+STATUS_FLAG_VEL_STATE_F = _BV(4) | _BV(3)
+STATUS_FLAG_RAMP_STATE_F = _BV(6) | _BV(5)
+STATUS_FLAG_STOPL_ACTIVE_F = _BV(7)
+STATUS_FLAG_STOPR_ACTIVE_F = _BV(8)
+STATUS_FLAG_VSTOPL_ACTIVE_F = _BV(9)
+# TODO finish missing
+STATUS_FLAG_DRIVER_STALLGUARD2 = _BV(24)
+STATUS_FLAG_DRIVER_OT_SHUTDOWN = _BV(25)
+STATUS_FLAG_DRIVER_OT_WARNING = _BV(26)
+STATUS_FLAG_DRIVER_S2GA = _BV(27)
+STATUS_FLAG_DRIVER_S2GB = _BV(28)
+STATUS_FLAG_DRIVER_OLA = _BV(29)
+STATUS_FLAG_DRIVER_OLB = _BV(30)
+STATUS_FLAG_DRIVER_STST_OR_OCHS = _BV(31)
+# SPI Out Conf Register
+SPI_OUT_CONFIG_TMC26X_SPI = 0b1010
+SPI_OUT_CONFIG_TMC26X_SD = 0b1011
+SPI_OUT_CONFIG_SPI_OUTPUT_FORMAT_OFF = 0b0000
+SPI_OUT_CONFIG_SPI_OUTPUT_FORMAT_SPIDAC_MAPPED = 0b0001
+SPI_OUT_CONFIG_SPI_OUTPUT_FORMAT_SPIDAC_ABS_POS = 0b0010
+SPI_OUT_CONFIG_SPI_OUTPUT_FORMAT_SPIDAC_ABS_NEG = 0b0011
+# TODO finish these
+SPI_OUT_CONFIG_SPI_OUTPUT_FORMAT_TMC26X_SPI = 0b1010
+SPI_OUT_CONFIG_SPI_OUTPUT_FORMAT_TMC26X_SD = 0b1011
 
 # (const unsigned long) default_4361_start_config
 # _BV(0) x_target requires start
@@ -32,6 +78,7 @@ class TMC4361:
     self._start_signal_pin = start_signal_pin
     self._target_reached_interrupt_pin = target_reached_interrupt_pin
     self._steps_per_revolution = motor_steps_per_rev
+    self._reset_pin = 26
     # TODO make configurable
     GPIO.setmode(GPIO.BCM)
 
@@ -41,43 +88,57 @@ class TMC4361:
     signal (START is an input), or START output indicates an active START event
     by switching from high to low level." Datasheet 9.1.3
     """
-    GPIO.setup(self._start_signal_pin, GPIO.OUT)
-    GPIO.output(self._start_signal_pin, GPIO.LOW)
+    GPIO.setup(self._reset_pin, GPIO.OUT)
+    # GPIO.setup(self._start_signal_pin, GPIO.OUT)
+    # GPIO.output(self._start_signal_pin, GPIO.LOW)
     # will be released after setup is complete
-    GPIO.setup(self._target_reached_interrupt_pin, GPIO.OUT)
-    GPIO.output(self._target_reached_interrupt_pin, GPIO.LOW)
+    # GPIO.setup(self._target_reached_interrupt_pin, GPIO.OUT)
+    # GPIO.output(self._target_reached_interrupt_pin, GPIO.LOW)
 
     # _BV(5) external start is an start (to ensure start is an input)
     # "External start signal is enabled as timer trigger. START pin is assigned as input."
-    self._spi.writeRegister(registers.TMC4361_START_CONFIG_REGISTER, 0 | _BV(5))
+    # self._spi.writeRegister(registers.TMC4361_START_CONFIG_REGISTER,
+    #   0 | START_CONFIG_TRIGGER_EVENTS_DISABLED)
 
-    GPIO.output(self._start_signal_pin, GPIO.HIGH)
+    # GPIO.output(self._start_signal_pin, GPIO.HIGH)
     # GPIO.setup(self._start_signal_pin, GPIO.IN)
 
     # preconfigure the TMC4361
 
+    self.reset(hard=True)
+
+    # Select the events we want reported with every status code.
     # see datasheet 19.13-19.14
     self._spi.writeRegister(registers.TMC4361_SPI_STATUS_SELECTION_REGISTER, 0 | _BV(0) | _BV(1))
 
-    # we don't use direct values
-    self._spi.writeRegister(registers.TMC4361_GENERAL_CONFIG_REGISTER, 0 | _BV(5))
+    self._spi.writeRegister(registers.TMC4361_GENERAL_CONFIG_REGISTER, 0 | _BV(5) | GENERAL_CONF_SERIAL_ENC_OUT_ENABLE)
+
     # Set positioning and ramp shape
-    self._spi.writeRegister(registers.TMC4361_RAMP_MODE_REGISTER, RAMP_MODE_POSITIONING_MODE | RAMP_MODE_S_SHAPED_RAMP)
-    # trapezoidal positioning
-    self._spi.writeRegister(registers.TMC4361_SH_RAMP_MODE_REGISTER, _BV(2) | 1)
-    # self._spi.writeRegister(registers.TMC4361_RAMP_MODE_REGISTER,_BV(2) | 2); //we want to go to positions in nice S-Ramps)
-    # self._spi.writeRegister(registers.TMC4361_SH_RAMP_MODE_REGISTER,_BV(2) | 2); //we want to go to positions in nice S-Ramps)
+    # self._spi.writeRegister(registers.TMC4361_RAMP_MODE_REGISTER, RAMP_MODE_POSITIONING_MODE | RAMP_MODE_S_SHAPED_RAMP)
+    # self._spi.writeRegister(registers.TMC4361_SH_RAMP_MODE_REGISTER, RAMP_MODE_POSITIONING_MODE | RAMP_MODE_S_SHAPED_RAMP)
+    # Section 6.3.4 No Ramp Motion Profile
+    self._spi.writeRegister(registers.TMC4361_RAMP_MODE_REGISTER, RAMP_MODE_POSITIONING_MODE | RAMP_MODE_NO_RAMP)
+    self._spi.writeRegister(registers.TMC4361_SH_RAMP_MODE_REGISTER, RAMP_MODE_POSITIONING_MODE | RAMP_MODE_NO_RAMP)
+
     self._spi.writeRegister(registers.TMC4361_CLK_FREQ_REGISTER, CLOCK_FREQUENCY)
     # NEEDED so THAT THE SQUIRREL CAN RECOMPUTE EVERYTHING!
-    self._spi.writeRegister(registers.TMC4361_START_DELAY_REGISTER, 512)
+    # self._spi.writeRegister(registers.TMC4361_START_DELAY_REGISTER, 512)
     self.set_motor_steps_per_rev(self._steps_per_revolution)
-    self._spi.writeRegister(registers.TMC4361_START_CONFIG_REGISTER, default_4361_start_config);
+    # self._spi.writeRegister(registers.TMC4361_START_CONFIG_REGISTER, default_4361_start_config);
     # filter start (unsigned long filter)
     # 0x20000 = 2 << 16, 0x400000 = 4 << 20
-    filter = 0x20000 | 0x400000
+    # filter = 0x20000 | 0x400000
     # filter ref
-    filter |= (2<<8) | 0x4000
-    self._spi.writeRegister(registers.TMC4361_INPUT_FILTER_REGISTER, filter)
+    # filter |= (2<<8) | 0x4000
+    # self._spi.writeRegister(registers.TMC4361_INPUT_FILTER_REGISTER, filter)
+
+  def stop(self):
+    self.reset(hard=True)
+
+  def abort(self):
+    # TODO In order to stop the motion during positioning, do as follows:
+    # Action: Set VMAX = 0 (register 0x24).
+    pass
 
   def set_motor_steps_per_rev(self, steps_per_rev):
     self._motor_steps_per_rev = steps_per_rev
@@ -102,10 +163,15 @@ class TMC4361:
     # self._spi.writeRegister(registers.TMC4361_START_CONFIG_REGISTER, _BV(5)) # keep START as an input
 
     # We write x_actual, x_target and pos_comp to the same value to be safe
-    self._spi.writeRegister(registers.TMC4361_V_MAX_REGISTER, 0)
+    # self._spi.writeRegister(registers.TMC4361_V_MAX_REGISTER, 0)
+
+    # 24 bits integer part, 8 bits decimal places
+    v_max = 500
+    v_max = v_max << 8
+    self._spi.writeRegister(registers.TMC4361_V_MAX_REGISTER, v_max)
     self._spi.writeRegister(registers.TMC4361_X_TARGET_REGISTER, position)
-    self._spi.writeRegister(registers.TMC4361_X_ACTUAL_REGISTER, position)
-    self._spi.writeRegister(registers.TMC4361_POSITION_COMPARE_REGISTER, position)
+    # self._spi.writeRegister(registers.TMC4361_X_ACTUAL_REGISTER, position)
+    # self._spi.writeRegister(registers.TMC4361_POSITION_COMPARE_REGISTER, position)
     self._last_target = position
 
     # Put the start register back the way it was
@@ -148,51 +214,33 @@ class TMC4361:
     value = datagram_to_int(datagram[1:])
     return value
 
-  def signal_start(self):
-    #prepare the pos compr registers
-    # clear the event register
-    self._spi.readRegister(registers.TMC4361_EVENTS_REGISTER)
-    pos_comp = next_pos_comp
-    # write the new pos_comp
-    self._spi.writeRegister(registers.TMC4361_POSITION_COMPARE_REGISTER, next_pos_comp)
-    # and mark it written
-    next_pos_comp = 0
-    direction = next_direction
+  def get_target_speed(self):
+    datagram = self._spi.readRegister(registers.TMC4361_V_MAX_REGISTER)
+    value = datagram_to_int(datagram[1:])
+    # 24 bits integer part, 8 bits decimal places
+    value = value >> 8
+    return value
 
-    # TODO this block is for demonstration only
-    # See if motor has reached target position
-    mn = 0 # previously a counter variable
-    # unsigned char positions_reached
-    positions_reached = 0
-    # unsigned long motor_pos
-    motor_pos = self._spi.readRegister(registers.TMC4361_X_ACTUAL_REGISTER)
-    # unsigned long motor_trg
-    motor_trg = self._spi.readRegister(registers.TMC4361_X_TARGET_REGISTER)
-    if motor_pos == motor_trg:
-      # all coordinated motors have reached target position
-      pass
+  def get_status_flags(self):
+    parsed_datagram = self._spi.readRegister(registers.TMC4361_STATUS_REGISTER)
+    datagram = datagram_to_int(parsed_datagram[1:])
+    out = []
+    for i in range(0,31):
+      if datagram & _BV(i):
+        out.append(_BV(i))
+    return out
 
-    if enable_start:
-      if is_new_position:
-        self._spi.writeRegister(registers.TMC4361_X_TARGET_REGISTER, next_targets)
-        is_new_position = False
-        last_targets = next_targets
-        # TODO make boolean flag: active_motors |= ( 1 << i )
-
-      # self._spi.readRegister(registers.TMC4361_START_CONFIG_REGISTER)
-
-      # start the motors, please
-      GPIO.output(self._start_signal_pin, GPIO.LOW)
-      sleep_microseconds(3) # the call by itself may have been enough
-      GPIO.output(self._start_signal_pin, GPIO.HIGH)
-      enable_start = False
-
-    # self._spi.readRegister(TMC4361_X_ACTUAL_REGISTER)
-    # self._spi.readRegister(TMC4361_X_TARGET_REGISTER)
-    # self._spi.readRegister(TMC4361_POSITION_COMPARE_REGISTER)
-    # self._spi.readRegister(TMC4361_V_MAX_REGISTER)
-    # self._spi.readRegister(TMC4361_A_MAX_REGISTER)
-    # self._spi.readRegister(TMC4361_D_MAX_REGISTER)
+  def get_status_events(self):
+    """
+    Read and parse the Status Event Register (EVENTS 0x0E).
+    """
+    parsed_datagram = self._spi.readRegister(registers.TMC4361_EVENTS_REGISTER)
+    datagram = datagram_to_int(parsed_datagram[1:])
+    out = []
+    for i in range(0,31):
+      if datagram & _BV(i):
+        out.append(_BV(i))
+    return out
 
   def configureEndstop(self, left, active_high):
     """
@@ -266,17 +314,67 @@ class TMC4361:
     endstop_config &= clearing_pattern
     return endstop_config
 
-  def reset(self, shutdown, bringup):
+  def reset(self, hard=False):
+    if hard:
+      GPIO.output(self._reset_pin, GPIO.LOW)
+      sleep_microseconds(10)
+      GPIO.output(self._reset_pin, GPIO.HIGH)
+    else:
+      # FIXME soft reset doesnt seem to work
+      # Do software reset by setting RESET_REG = 0x525354 (Bits31:8 of register 0x4F)
+      rst = 0x525354
+      rst = rst << 8
+      out = self._spi.writeRegister(registers.TMC4361_RESET_CLK_GATING_REGISTER, rst)
+      # print(bin(out[0]))
+      # print(self._spi.readRegister(registers.TMC4361_RESET_CLK_GATING_REGISTER))
+      # print('resetting')
+      # print(STATUS_EVENT_RST_EV in self.get_status_events())
+
+  def enable_tmc26x(self):
     """
-    Arguments:
-    (boolean) shutdown
-    (boolean) bringup
+    Enable special support for TCM26x drivers.
+    See section 10.6 in the TMC4361 datasheet.
     """
-    if shutdown:
-      # Use HWBE pin to reset motion controller TMC4361
-      # to check (reset for motion controller)
-      PORTE &= ~(_BV(2))
-    if shutdown and bringup:
-      delay(1);
-    if bringup:
-      PORTE |= _BV(2)
+    # autorepeat_cover_en
+    datagram = 0 | _BV(7)
+    datagram = datagram | SPI_OUT_CONFIG_TMC26X_SPI
+
+    """
+    Set the number of internal clock cycles the serial clock should stay low at
+    SPI_OUT_LOW_TIME = SPIOUT_CONF (23:20).
+     Set the number of internal clock cycles the serial clock should stay high at
+    SPI_OUT_HIGH_TIME = SPIOUT_CONF (27:24).
+     Also, an SPI_OUT_BLOCK_TIME = SPIOUT_CONF(31:28) can be set for a
+    minimum time period during which no new datagram is sent after the last SPI
+    output datagram.
+    """
+    spi_out_block_time = 2 # clock cycles
+    spi_out_low_time = 2 # clock cycles
+    spi_out_high_time = 2 # clock cycles
+    datagram = spi_out_block_time << 28
+    datagram |= spi_out_high_time << 24
+    datagram |= spi_out_low_time << 20
+    datagram |= SPI_OUT_CONFIG_TMC26X_SD
+    self._spi.writeRegister(registers.TMC4361_SPIOUT_CONF_REGISTER, datagram)
+
+  def transfer_to_tmc2660(self, datagram):
+    """
+    Datagram should be 20 bits.
+    """
+    spiout_conf = self._spi.readRegister(registers.TMC4361_SPIOUT_CONF_REGISTER)
+    spiout_conf = datagram_to_int(spiout_conf[1:])
+    cover_data_length = 20
+    new_spiout_conf = spiout_conf | ( cover_data_length << 13 )
+    print('spiout_conf', bin(spiout_conf), '->', bin(new_spiout_conf))
+
+    # donk = ( new_spiout_conf & ( 0b111111 << 13 ) ) >> 13
+    # print('donk', donk)
+
+    self._spi.writeRegister(registers.TMC4361_SPIOUT_CONF_REGISTER, new_spiout_conf)
+
+    self._spi.writeRegister(registers.TMC4361_COVER_LOW_REGISTER, datagram)
+    resp = self._spi.readRegister(registers.TMC4361_COVER_DRV_LOW_REGISTER)
+
+    self._spi.writeRegister(registers.TMC4361_SPIOUT_CONF_REGISTER, spiout_conf)
+
+    return resp

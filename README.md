@@ -61,6 +61,20 @@ For all other STEP/DIR drivers.
 
   ./test/test.sh
 
+## Wiring
+
+### TMC4361/TMC4361-Eval to TMC2660
+
+TMC4361       TMC4361-Eval      TMC2660   
+-------       ------------      -------
+STPOUT_PWMA   DIO6 (#17)        STEP      
+DIRPOUT_PWMB  DIO7 (#18)        DIR       
+MP1           DIO14 (#36)       SG_TST    
+NSCSDRV_SDO   SPI2_CSN0 (#24)   CSN       
+SDODRV_SCLK   SPI2_SDO (#28)    SDI       
+SCKDRV_NSDO   SPI_SCK (#27)     SCK       
+SDIDRV_NSCLK  SPI2_SDI (#29)    SDO       
+
 ## Trinamic Support
 
 TMC 260/261/262/2660 Stepper library for Python

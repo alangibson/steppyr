@@ -15,7 +15,7 @@ class SPI(activator_spi.SPI):
     unsigned const char the_register
     unsigned const long datagram
     """
-    self.sendRegister(the_register | registers.WRITE_MASK, datagram)
+    return self.sendRegister(the_register | registers.WRITE_MASK, datagram)
 
   def readRegister(self, the_register):
     """
