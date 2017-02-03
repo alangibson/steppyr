@@ -1,7 +1,8 @@
 import logging
 import RPi.GPIO as GPIO
-from RaspberryPiStepperDriver import tobin, set_bit, unset_bit
-from .stepdir import StepDirActivator
+from RaspberryPiStepperDriver import tobin, set_bit, unset_bit, constrain
+from .registers import *
+from RaspberryPiStepperDriver.activators.stepdir import StepDirActivator
 
 """
 Ported to Python from https://github.com/trinamic/TMC26XStepper
@@ -93,23 +94,6 @@ CHOPPER_CONFIG_REGISTER = {
   'T_OFF_TIMING_PATERN': 0XF
   }
 
-# Microstep resolution for STEP/DIR mode.
-# Microsteps per 90°
-MICROSTEP_RESOLUTION = {
-  256:  0b0000,
-  128:  0b0001,
-  64:   0b0010,
-  32:   0b0011,
-  16:   0b0100,
-  4:    0b0110,
-  8:    0b0101,
-  2:    0b0111,  # halfstep
-  1:    0b1000   # fullstep
-}
-
-# default values
-INITIAL_MICROSTEPPING = MICROSTEP_RESOLUTION[32]
-
 class TMC26XActivator(StepDirActivator):
 
   def __init__(self, spi, dir_pin, step_pin, pin_mode=GPIO.BCM, current=300, resistor=150):
@@ -122,38 +106,48 @@ class TMC26XActivator(StepDirActivator):
     """
     super().__init__(dir_pin=dir_pin, step_pin=step_pin, pin_mode=pin_mode)
     self._microsteps = 1
-    self.spi = spi
+    self._spi = spi
     # store the current and sense resistor value for later use
-    self.resistor = resistor
-    self.current = current
+    self._resistor = resistor
+    self._current_ma = current
     # we are not started yet
-    self.started = False
+    self._started = False
     # by default cool step is not enabled
-    self.cool_step_enabled = False
+    self._cool_step_enabled = False
     # Holds the last result read from the spi bus
-    self.driver_status_result = None
+    self._driver_status_result = None
     # setting the default register values
-    self.driver_control_register_value = set_bit(REGISTERS['DRIVER_CONTROL_REGISTER'], INITIAL_MICROSTEPPING)
-    self._microsteps = (1 << INITIAL_MICROSTEPPING)
-    self.chopper_config_register = REGISTERS['CHOPPER_CONFIG_REGISTER']
-    self.cool_step_register_value = REGISTERS['COOL_STEP_REGISTER']
-    self.stall_guard2_current_register_value = REGISTERS['STALL_GUARD2_LOAD_MEASURE_REGISTER']
-    self.driver_configuration_register_value = set_bit(REGISTERS['DRIVER_CONFIG_REGISTER'], DRIVER_CONTROL_REGISTER['READ_STALL_GUARD_READING'])
+    # self.driver_control_register_value = set_bit(REGISTERS['DRIVER_CONTROL_REGISTER'], INITIAL_MICROSTEPPING)
+    # self._microsteps = (1 << INITIAL_MICROSTEPPING)
+    # self.chopper_config_register = REGISTERS['CHOPPER_CONFIG_REGISTER']
+    # self.cool_step_register_value = REGISTERS['COOL_STEP_REGISTER']
+    # self.stall_guard2_current_register_value = REGISTERS['STALL_GUARD2_LOAD_MEASURE_REGISTER']
+    # self.driver_configuration_register_value = set_bit(REGISTERS['DRIVER_CONFIG_REGISTER'], DRIVER_CONTROL_REGISTER['READ_STALL_GUARD_READING'])
+    self.driver_control_register = DriverControlRegister()
+    self.chopper_config_register = ChopperControllRegister()
+    self.cool_step_register = CoolStepControlRegister()
+    self.stall_guard2_register = StallGuard2ControlRegister()
+    self.driver_config_register = DriverConfigRegister()
 
   def start(self):
     # set the current
-    self.set_current(self.current)
+    self.set_current(self._current_ma)
     # set to a conservative start value
-    self.set_constant_off_time_chopper(7, 54, 13, 12, 1)
+    self.set_constant_off_time_chopper(
+      constant_off_time=7,
+      blank_time=54,
+      fast_decay_time_setting=13,
+      sine_wave_offset=12,
+      use_current_comparator=1)
     # set a nice microstepping value
     self.set_microsteps(self._microsteps)
     # Send configuration to the driver chip
-    self.send262(self.driver_control_register_value)
-    self.send262(self.chopper_config_register)
-    self.send262(self.cool_step_register_value)
-    self.send262(self.stall_guard2_current_register_value)
-    self.send262(self.driver_configuration_register_value)
-    self.started = True
+    self._spi.write(self.driver_control_register)
+    self._spi.write(self.chopper_config_register)
+    self._spi.write(self.cool_step_register)
+    self._spi.write(self.stall_guard2_register)
+    self._spi.write(self.driver_config_register)
+    self._started = True
     super().start()
 
   def stop(self):
@@ -169,45 +163,47 @@ class TMC26XActivator(StepDirActivator):
     self.set_enabled(False)
 
   def set_microsteps(self, microsteps):
-    setting_pattern = 0
+    # setting_pattern = 0
     # poor mans log
     if microsteps >= 256:
-      setting_pattern = 0
+      # setting_pattern = 0
       self._microsteps = 256
     elif microsteps >= 128:
-      setting_pattern = 1
+      # setting_pattern = 1
       self._microsteps = 128
     elif microsteps >= 64:
-      setting_pattern = 2
+      # setting_pattern = 2
       self._microsteps = 64
     elif microsteps >= 32:
-      setting_pattern = 3
+      # setting_pattern = 3
       self._microsteps = 32
     elif microsteps>=16:
-      setting_pattern = 4
+      # setting_pattern = 4
       self._microsteps = 16
     elif microsteps >= 8:
-      setting_pattern = 5
+      # setting_pattern = 5
       self._microsteps = 8
     elif microsteps >= 4:
-      setting_pattern = 6
+      # setting_pattern = 6
       self._microsteps = 4
     elif microsteps >= 2:
-      setting_pattern = 7
+      # setting_pattern = 7
       self._microsteps = 2
       # 1 and 0 lead to full step
     elif microsteps <= 1:
-      setting_pattern = 8
+      # setting_pattern = 8
       self._microsteps = 1
 
     # delete the old value
-    self.driver_control_register_value &= 0xFFFF0
+    # self.driver_control_register_value &= 0xFFFF0
     # set the new value
-    self.driver_control_register_value = set_bit(self.driver_control_register_value, setting_pattern)
+    # self.driver_control_register_value = set_bit(self.driver_control_register_value, setting_pattern)
+    self.driver_control_register.set(DriverControlRegister.bits.MRES, MICROSTEP_RESOLUTION[self._microsteps])
 
     # if started we directly send it to the motor
-    if self.started:
-      self.send262(self.driver_control_register_value)
+    if self._started:
+      # self.send262(self.driver_control_register_value)
+      self._spi.write(self.driver_control_register)
 
   @property
   def microsteps(self):
@@ -224,7 +220,7 @@ class TMC26XActivator(StepDirActivator):
     """
     # Send datagram to driver
     msg = [ ((datagram >> 16) & 0xff), ((datagram >>  8) & 0xff), ((datagram) & 0xff) ]
-    out = self.spi.transfer(msg)
+    out = self._spi.transfer(msg)
 
     # Process and save the response
     response = out[0]
@@ -233,13 +229,15 @@ class TMC26XActivator(StepDirActivator):
     response <<= 8
     response |= out[2]
     response <<= 4
-    self.driver_status_result = response
+    self._driver_status_result = response
 
     return out
 
   def is_enabled(self):
     """ Returns true if hardware is enabled, False otherwise """
-    if self.chopper_config_register & CHOPPER_CONFIG_REGISTER['T_OFF_PATTERN']:
+    toff = self.chopper_config_register.get(ChopperControllRegister.bits.TOFF)
+    # if self.chopper_config_register & CHOPPER_CONFIG_REGISTER['T_OFF_PATTERN']:
+    if toff != 0:
       return True
     else:
       return False
@@ -247,24 +245,26 @@ class TMC26XActivator(StepDirActivator):
   def set_enabled(self, enabled):
     """ Does the work of enabling or disabling the hardware """
     # delete the t_off in the chopper config to get sure
-    self.chopper_config_register = unset_bit(self.chopper_config_register, CHOPPER_CONFIG_REGISTER['T_OFF_PATTERN'])
+    # self.chopper_config_register = unset_bit(self.chopper_config_register, CHOPPER_CONFIG_REGISTER['T_OFF_PATTERN'])
     if enabled:
       # and set the t_off time
-      self.chopper_config_register = set_bit(self.chopper_config_register, self.constant_off_time)
+      # self.chopper_config_register = set_bit(self.chopper_config_register, self.constant_off_time)
+      self.chopper_config_register.set(ChopperControllRegister.bits.TOFF, self.constant_off_time)
     # if not enabled we don't have to do anything since we already delete t_off from the register
-    if self.started:
-      self.send262(self.chopper_config_register)
+    if self._started:
+      self._spi.write(self.chopper_config_register)
 
   def set_current(self, current_ma):
     """
     current_ma: current in milliamps
     """
-    self.current = current_ma
+    self._current_ma = current_ma
     current_scaling = 0
 
-    resistor_value = self.resistor
+    resistor_value = self._resistor
     # remove vesense flag
-    self.driver_configuration_register_value = unset_bit(self.driver_configuration_register_value, DRIVER_CONTROL_REGISTER['VSENSE'])
+    # self.driver_configuration_register_value = unset_bit(self.driver_configuration_register_value, DRIVER_CONTROL_REGISTER['VSENSE'])
+    self.driver_config_register.unset(DriverConfigRegister.bits.VSENSE)
 
     # This is derrived from I=(cs+1)/32*(Vsense/Rsense)
     # leading to cs = CS = 32*R*I/V (with V = 0,31V oder 0,165V  and I = 1000*current)
@@ -272,10 +272,11 @@ class TMC26XActivator(StepDirActivator):
     # for vsense = 0,310V (VSENSE not set)
     # or vsense = 0,165V (VSENSE set)
     current_scaling = ( ( resistor_value * current_ma * 32.0 / ( 0.31 * 1000.0 * 1000.0 ) ) - 0.5) # theoretically - 1.0 for better rounding it is 0.5
-    # check if the current scalingis too low
+    # check if the current scaling is too low
     if current_scaling < 16:
       # set the csense bit to get a use half the sense voltage (to support lower motor currents)
-      self.driver_configuration_register_value = set_bit(self.driver_configuration_register_value, DRIVER_CONTROL_REGISTER['VSENSE'])
+      # self.driver_configuration_register_value = set_bit(self.driver_configuration_register_value, DRIVER_CONTROL_REGISTER['VSENSE'])
+      self.driver_config_register.set(DriverConfigRegister.bits.VSENSE)
       # and recalculate the current setting
       current_scaling = int(( ( resistor_value * current_ma * 32.0 / ( 0.165 * 1000.0 * 1000.0 ) ) - 0.5) )# theoretically - 1.0 for better rounding it is 0.5
 
@@ -284,21 +285,25 @@ class TMC26XActivator(StepDirActivator):
       current_scaling = 31
 
     # delete the old value
-    self.stall_guard2_current_register_value = unset_bit(self.stall_guard2_current_register_value, STALL_GUARD_REGISTER['CURRENT_SCALING_PATTERN'])
+    # self.stall_guard2_current_register_value = unset_bit(self.stall_guard2_current_register_value, STALL_GUARD_REGISTER['CURRENT_SCALING_PATTERN'])
     # set the new current scaling
-    self.stall_guard2_current_register_value = set_bit(self.stall_guard2_current_register_value, current_scaling)
+    # self.stall_guard2_current_register_value = set_bit(self.stall_guard2_current_register_value, current_scaling)
+    self.stall_guard2_register.set(StallGuard2ControlRegister.bits.CS, current_scaling)
 
     # if started we directly send it to the motor
-    if self.started:
-      self.send262(self.driver_configuration_register_value)
-      self.send262(self.stall_guard2_current_register_value)
+    if self._started:
+      self._spi.write(self.driver_config_register)
+      self._spi.write(self.stall_guard2_register)
 
   def get_current(self):
     # we calculate the current according to the datasheet to be on the safe side
     # this is not the fastest but the most accurate and illustrative way
-    result = self.stall_guard2_current_register_value & STALL_GUARD_REGISTER['CURRENT_SCALING_PATTERN']
-    resistor_value = self.resistor
-    voltage = 0.165 if (self.driver_configuration_register_value & DRIVER_CONTROL_REGISTER['VSENSE']) else 0.31
+    # result = self.stall_guard2_current_register_value & STALL_GUARD_REGISTER['CURRENT_SCALING_PATTERN']
+    result = self.stall_guard2_register.get(StallGuard2ControlRegister.bits.CS)
+    resistor_value = self._resistor
+    vsense_on = self.driver_config_register.get(DriverConfigRegister.bits.VSENSE)
+    # voltage = 0.165 if (self.driver_configuration_register_value & DRIVER_CONTROL_REGISTER['VSENSE']) else 0.31
+    voltage = 0.165 if vsense_on else 0.31
     result = ( result + 1.0 ) / 32.0 * voltage / resistor_value * 1000.0 * 1000.0
     return result
 
@@ -323,11 +328,11 @@ class TMC26XActivator(StepDirActivator):
       0: end by time only
     """
     # perform some sanity checks
-    if constant_off_time < 2:
-      constant_off_time = 2
-    elif constant_off_time > 15:
-      constant_off_time = 15
-
+    # if constant_off_time < 2:
+    #  constant_off_time = 2
+    #elif constant_off_time > 15:
+    #  constant_off_time = 15
+    constant_off_time = constrain(constant_off_time, 2, 15)
     # save the constant off time
     self.constant_off_time = constant_off_time
 
@@ -355,37 +360,44 @@ class TMC26XActivator(StepDirActivator):
 
     # calculate the register setting
     # first of all delete all the values for this
-    self.chopper_config_register = unset_bit(
-      self.chopper_config_register,
-      ( (1 << 12) | CHOPPER_CONFIG_REGISTER['BLANK_TIMING_PATTERN']
-                  | CHOPPER_CONFIG_REGISTER['HYSTERESIS_DECREMENT_PATTERN']
-                  | CHOPPER_CONFIG_REGISTER['HYSTERESIS_LOW_VALUE_PATTERN']
-                  | CHOPPER_CONFIG_REGISTER['HYSTERESIS_START_VALUE_PATTERN']
-                  | CHOPPER_CONFIG_REGISTER['T_OFF_TIMING_PATERN'] ) )
+    # self.chopper_config_register = unset_bit(
+    #  self.chopper_config_register,
+    #  ( (1 << 12) | CHOPPER_CONFIG_REGISTER['BLANK_TIMING_PATTERN']
+    #              | CHOPPER_CONFIG_REGISTER['HYSTERESIS_DECREMENT_PATTERN']
+    #              | CHOPPER_CONFIG_REGISTER['HYSTERESIS_LOW_VALUE_PATTERN']
+    #              | CHOPPER_CONFIG_REGISTER['HYSTERESIS_START_VALUE_PATTERN']
+    #              | CHOPPER_CONFIG_REGISTER['T_OFF_TIMING_PATERN'] ) )
 
     # set the constant off pattern
-    self.chopper_config_register = set_bit(self.chopper_config_register, CHOPPER_CONFIG_REGISTER['CHOPPER_MODE_T_OFF_FAST_DECAY'])
+    # self.chopper_config_register = set_bit(self.chopper_config_register, CHOPPER_CONFIG_REGISTER['CHOPPER_MODE_T_OFF_FAST_DECAY'])
+    self.chopper_config_register.set(ChopperControllRegister.bits.CHM, 1) # Constant tOFF with fast decay time
     # set the blank timing value
-    self.chopper_config_register = set_bit(self.chopper_config_register, blank_value << CHOPPER_CONFIG_REGISTER['BLANK_TIMING_SHIFT'])
+    # self.chopper_config_register = set_bit(self.chopper_config_register, blank_value << CHOPPER_CONFIG_REGISTER['BLANK_TIMING_SHIFT'])
+    self.chopper_config_register.set(ChopperControllRegister.bits.TB, blank_value)
     #setting the constant off time
-    self.chopper_config_register = set_bit(self.chopper_config_register, constant_off_time)
+    # self.chopper_config_register = set_bit(self.chopper_config_register, constant_off_time)
+    self.chopper_config_register.set(ChopperControllRegister.bits.TOFF, constant_off_time)
     #set the fast decay time
     #set msb
-    self.chopper_config_register = set_bit(self.chopper_config_register,
-      (fast_decay_time_setting & 0x8) << CHOPPER_CONFIG_REGISTER['HYSTERESIS_DECREMENT_SHIFT'])
+    #self.chopper_config_register = set_bit(self.chopper_config_register,
+    #  (fast_decay_time_setting & 0x8) << CHOPPER_CONFIG_REGISTER['HYSTERESIS_DECREMENT_SHIFT'])
+    self.chopper_config_register.set(ChopperControllRegister.bits.HDEC, fast_decay_time_setting & 0x8)
     #other bits
-    self.chopper_config_register = set_bit(self.chopper_config_register,
-      (fast_decay_time_setting & 0x7) << CHOPPER_CONFIG_REGISTER['HYSTERESIS_START_VALUE_SHIFT'])
+    # self.chopper_config_register = set_bit(self.chopper_config_register,
+    #  (fast_decay_time_setting & 0x7) << CHOPPER_CONFIG_REGISTER['HYSTERESIS_START_VALUE_SHIFT'])
+    self.chopper_config_register.set(ChopperControllRegister.bits.HSTRT, fast_decay_time_setting & 0x7)
     #set the sine wave offset
-    self.chopper_config_register = set_bit(self.chopper_config_register,
-      sine_wave_offset << CHOPPER_CONFIG_REGISTER['HYSTERESIS_LOW_SHIFT'])
+    # self.chopper_config_register = set_bit(self.chopper_config_register,
+    #   sine_wave_offset << CHOPPER_CONFIG_REGISTER['HYSTERESIS_LOW_SHIFT'])
+    self.chopper_config_register.set(ChopperControllRegister.bits.HEND, sine_wave_offset)
+    # TODO not sure if this is right
     #using the current comparator?
     if not use_current_comparator:
-      self.chopper_config_register = set_bit(self.chopper_config_register, (1<<12))
+      self.chopper_config_register.set(1<<12)
     #if started we directly send it to the motor
-    # TODO is this right? Shouldnt we send self.chopper_config_register?
-    if self.started:
-      self.send262(self.driver_control_register_value)
+    if self._started:
+      self._spi.write(self.driver_control_register)
+      self._spi.write(self.chopper_config_register)
 
   def set_random_off_time(self, value):
     if value:
@@ -393,7 +405,7 @@ class TMC26XActivator(StepDirActivator):
     else:
       self.chopper_config_register &= ~ CHOPPER_CONFIG_REGISTER['RANDOM_TOFF_TIME']
     # if started we directly send it to the motor
-    if self.started:
+    if self._started:
       self.send262(self.driver_control_register_value)
 
   def set_stall_guard_threshold(self, stall_guard_threshold, stall_guard_filter_enabled):
@@ -413,7 +425,7 @@ class TMC26XActivator(StepDirActivator):
     # Set the new stall guard threshold
     self.stall_guard2_current_register_value |= (( stall_guard_threshold << 8 ) & STALL_GUARD_REGISTER['STALL_GUARD_CONFIG_PATTERN'] )
     # if started we directly send it to the motor
-    if self.started:
+    if self._started:
       self.send262(self.stall_guard2_current_register_value)
 
   def set_step_interpolation(self, enable=True):
@@ -427,7 +439,7 @@ class TMC26XActivator(StepDirActivator):
       self.driver_configuration_register_value = set_bit(self.driver_configuration_register_value, DRIVER_CONTROL_REGISTER['STEP_INTERPOLATION'])
     else:
       self.driver_configuration_register_value = unset_bit(self.driver_configuration_register_value, DRIVER_CONTROL_REGISTER['STEP_INTERPOLATION'])
-    if self.started:
+    if self._started:
       self.send262(self.driver_configuration_register_value)
 
   def get_stall_guard_threshold(self):
@@ -454,7 +466,7 @@ class TMC26XActivator(StepDirActivator):
     read_value: One of TMC26X_READOUT_STALLGUARD or TMC26X_READOUT_CURRENT.
                 All other cases are ignored to prevent funny values.
 
-    Returns self.driver_status_result for convenience.
+    Returns self._driver_status_result for convenience.
     """
     old_driver_configuration_register_value = self.driver_configuration_register_value
     # reset the readout configuration
@@ -471,7 +483,7 @@ class TMC26XActivator(StepDirActivator):
       self.send262(self.driver_configuration_register_value)
     # write the configuration to get the last status
     self.send262(self.driver_configuration_register_value)
-    return self.driver_status_result
+    return self._driver_status_result
 
   def get_readout_value(self):
     """
@@ -481,9 +493,9 @@ class TMC26XActivator(StepDirActivator):
     return self.get_driver_status() >> 10
 
   def get_driver_status(self):
-    if self.driver_status_result == None:
+    if self._driver_status_result == None:
       raise ValueError('driver_status_result is empty. Call read_status() first.')
-    return self.driver_status_result
+    return self._driver_status_result
 
   def get_motor_position(self):
     # we read it out even if we are not started yet - perhaps it is useful information for somebody
@@ -496,7 +508,7 @@ class TMC26XActivator(StepDirActivator):
     returns -1 if stallguard information is not present
     """
     # if we don't yet started there cannot be a stall guard value
-    if not self.started:
+    if not self._started:
       return -1
     # not time optimal, but solution optiomal:
     # first read out the stall guard value
@@ -514,7 +526,7 @@ class TMC26XActivator(StepDirActivator):
 
   def get_current_current(self):
     result = self.get_current_cs_reading()
-    resistor_value = self.resistor
+    resistor_value = self._resistor
     voltage = 0.165 if (self.driver_configuration_register_value & DRIVER_CONTROL_REGISTER['VSENSE']) else 0.31
     result = ( result + 1.0 ) / 32.0 * voltage / resistor_value * 1000.0 * 1000.0
     return result
@@ -523,7 +535,7 @@ class TMC26XActivator(StepDirActivator):
     """
     return true if the stallguard threshold has been reached
     """
-    if self.started:
+    if self._started:
       return False
     return (self.get_driver_status() & STATUS_STALL_GUARD_STATUS)
 
@@ -534,7 +546,7 @@ class TMC26XActivator(StepDirActivator):
     OVER_TEMPERATURE_SHUTDOWN if the temperature is so hot that the driver is shut down
     Any of those levels are not too good.
     """
-    if self.started:
+    if self._started:
       return False
     if self.get_driver_status() & STATUS_OVER_TEMPERATURE_SHUTDOWN:
       return TMC26X_OVERTEMPERATURE_SHUTDOWN
@@ -546,7 +558,7 @@ class TMC26XActivator(StepDirActivator):
     """
     is motor channel A shorted to ground
     """
-    if not self.started:
+    if not self._started:
       return False
     return ( self.get_driver_status() & STATUS_SHORT_TO_GROUND_A )
 
@@ -554,7 +566,7 @@ class TMC26XActivator(StepDirActivator):
     """
     is motor channel B shorted to ground
     """
-    if not self.started:
+    if not self._started:
       return False
     return ( self.get_driver_status() & STATUS_SHORT_TO_GROUND_B )
 
@@ -562,7 +574,7 @@ class TMC26XActivator(StepDirActivator):
     """
     is motor channel A connected
     """
-    if not self.started:
+    if not self._started:
       return False
     return ( self.get_driver_status() & STATUS_OPEN_LOAD_A )
 
@@ -570,7 +582,7 @@ class TMC26XActivator(StepDirActivator):
     """
     is motor channel B connected
     """
-    if not self.started:
+    if not self._started:
       return False
     return ( self.get_driver_status() & STATUS_OPEN_LOAD_B )
 
@@ -578,7 +590,7 @@ class TMC26XActivator(StepDirActivator):
     """
     is chopper inactive since 2^20 clock cycles - defaults to ~0,08s
     """
-    if not self.started:
+    if not self._started:
       return False
     return ( self.get_driver_status() & STATUS_STAND_STILL )
 
@@ -586,7 +598,7 @@ class TMC26XActivator(StepDirActivator):
     """
     is chopper inactive since 2^20 clock cycles - defaults to ~0,08s
     """
-    if not self.started:
+    if not self._started:
       return False
     return ( self.get_driver_status() & STATUS_STALL_GUARD_STATUS )
 

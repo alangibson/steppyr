@@ -1,8 +1,10 @@
 import logging
 import spidev
 from RaspberryPiStepperDriver import tobin, set_bit, unset_bit
-from RaspberryPiStepperDriver.motion.tmc4361 import registers
+from RaspberryPiStepperDriver.activators.tmc4361 import registers
 from RaspberryPiStepperDriver.activators import spi as activator_spi
+from RaspberryPiStepperDriver.activators.tmc4361.registers import CoverLowRegister
+
 
 log = logging.getLogger(__name__)
 
@@ -67,3 +69,16 @@ class SPI(activator_spi.SPI):
     self.transfer([datagram.header, 0, 0, 0, 0])
     return datagram.as_response(
       self.transfer([datagram.header, 0, 0, 0, 0]) )
+
+class TMC26xCoverSPI(activator_spi.SPI):
+  """
+  An adapter that allows the TMC26x activator to talk to the TMC26x chip
+  transparently by using the TMC4361 cover register.
+  """
+  def __init__(self, spi):
+    self._spi = spi
+
+  def write(self, tmc26x_datagram):
+    datagram = CoverLowRegister(tmc26x_datagram.datagram)
+    print('sending to tmc26x via cover', tmc26x_datagram.datagram)
+    self._spi.write(datagram)

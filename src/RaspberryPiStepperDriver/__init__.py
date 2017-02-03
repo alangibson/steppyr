@@ -43,6 +43,12 @@ def set_bit(value, mask):
   #log.debug('setting bit(s) %s %s -> %s', bin(value), bin(mask), bin(new_value))
   return new_value
 
+def get_bits(value, mask):
+  """
+  Returns the bits from value that are masked by mask.
+  """
+  return (value & mask) >> lsb(mask)
+
 def clear_bit(value, bit):
   """
   Clear a bit, aka set it to 0

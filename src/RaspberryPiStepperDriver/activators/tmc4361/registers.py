@@ -3,7 +3,7 @@ registers for TMC4361
 """
 import functools
 from RaspberryPiStepperDriver import set_bit, unset_bit, lsb, mask, _BV
-from RaspberryPiStepperDriver.motion.tmc4361.io import Datagram
+from RaspberryPiStepperDriver.activators.tmc4361.io import Datagram
 
 WRITE_MASK = 0x80 # register | WRITE_MASK
 READ_MASK = 0x7F # register & READ_MASK

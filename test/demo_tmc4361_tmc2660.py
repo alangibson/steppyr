@@ -3,8 +3,8 @@ import RPi.GPIO as GPIO
 from RaspberryPiStepperDriver.activators import spi, tmc26x
 from RaspberryPiStepperDriver import drivers, sleep_microseconds
 from RaspberryPiStepperDriver.profiles.rectangle import RectangleProfile
-from RaspberryPiStepperDriver.motion.tmc4361.driver import *
-from RaspberryPiStepperDriver.motion.tmc4361.spi import SPI as TMC4361SPI
+from RaspberryPiStepperDriver.activators.tmc4361.driver import *
+from RaspberryPiStepperDriver.activators.tmc4361.spi import SPI as TMC4361SPI
 
 # logging.config.fileConfig('logging.ini')
 logging.basicConfig(level=logging.INFO)

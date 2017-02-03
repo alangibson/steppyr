@@ -1,7 +1,9 @@
 import logging
 import RPi.GPIO as GPIO
 from RaspberryPiStepperDriver import sleep_microseconds, tobin, set_bit, unset_bit, datagram_to_int, _BV
-from RaspberryPiStepperDriver.motion.tmc4361.registers import *
+from RaspberryPiStepperDriver.activators.tmc4361.registers import *
+from RaspberryPiStepperDriver.activators.tmc26x import registers as tmc26x_registers, TMC26XActivator
+from RaspberryPiStepperDriver.activators.tmc4361.spi import TMC26xCoverSPI
 
 log = logging.getLogger(__name__)
 
@@ -189,8 +191,8 @@ class TMC4361:
     # 24 bits integer part, 8 bits decimal places
     v_max = 500
     v_max = v_max << 8
-    self._spi.writeRegister(registers.TMC4361_V_MAX_REGISTER, v_max)
-    self._spi.writeRegister(registers.TMC4361_X_TARGET_REGISTER, position)
+    self._spi.writeRegister(TMC4361_V_MAX_REGISTER, v_max)
+    self._spi.writeRegister(TMC4361_X_TARGET_REGISTER, position)
     # self._spi.writeRegister(registers.TMC4361_X_ACTUAL_REGISTER, position)
     # self._spi.writeRegister(registers.TMC4361_POSITION_COMPARE_REGISTER, position)
     self._last_target = position
@@ -202,41 +204,41 @@ class TMC4361:
     # FIXME What is this code supposed to be doing?
     # Modify shadow registers
     # trapezoidal positioning
-    self._spi.writeRegister(registers.TMC4361_SH_RAMP_MODE_REGISTER, _BV(2) | 1)
+    self._spi.writeRegister(TMC4361_SH_RAMP_MODE_REGISTER, _BV(2) | 1)
     # set the velocity
-    self._spi.writeRegister(registers.TMC4361_SH_V_MAX_REGISTER, FIXED_23_8_MAKE(vMax))
+    self._spi.writeRegister(TMC4361_SH_V_MAX_REGISTER, FIXED_23_8_MAKE(vMax))
     # set maximum acceleration
-    self._spi.writeRegister(registers.TMC4361_SH_A_MAX_REGISTER, fixed_a_max)
+    self._spi.writeRegister(TMC4361_SH_A_MAX_REGISTER, fixed_a_max)
     # set maximum deceleration
-    self._spi.writeRegister(registers.TMC4361_SH_D_MAX_REGISTER, fixed_a_max)
+    self._spi.writeRegister(TMC4361_SH_D_MAX_REGISTER, fixed_a_max)
     # self._spi.writeRegister(registers.TMC4361_SH_V_START_REGISTER,FIXED_23_8_MAKE(vMax/2)); //set start velocity
     # self._spi.writeRegister(registers.TMC4361_SH_V_STOP_REGISTER,FIXED_23_8_MAKE(vMax/2)); //set stop velocity
     # set start velocity
-    self._spi.writeRegister(registers.TMC4361_SH_V_START_REGISTER,FIXED_23_8_MAKE(0))
+    self._spi.writeRegister(TMC4361_SH_V_START_REGISTER,FIXED_23_8_MAKE(0))
     # set stop velocity
-    self._spi.writeRegister(registers.TMC4361_SH_V_STOP_REGISTER,FIXED_23_8_MAKE(0))
+    self._spi.writeRegister(TMC4361_SH_V_STOP_REGISTER,FIXED_23_8_MAKE(0))
     # set start velocity
-    self._spi.writeRegister(registers.TMC4361_SH_V_START_REGISTER,FIXED_23_8_MAKE(vStart))
+    self._spi.writeRegister(TMC4361_SH_V_START_REGISTER,FIXED_23_8_MAKE(vStart))
     # set stop velocity
-    self._spi.writeRegister(registers.TMC4361_SH_V_STOP_REGISTER,FIXED_23_8_MAKE(vStop))
+    self._spi.writeRegister(TMC4361_SH_V_STOP_REGISTER,FIXED_23_8_MAKE(vStop))
 
   def get_current_position(self):
-    datagram = self._spi.readRegister(registers.TMC4361_X_ACTUAL_REGISTER)
+    datagram = self._spi.readRegister(TMC4361_X_ACTUAL_REGISTER)
     value = datagram_to_int(datagram[1:])
     return value
 
   def get_current_speed(self):
-    datagram = self._spi.readRegister(registers.TMC4361_V_ACTUAL_REGISTER)
+    datagram = self._spi.readRegister(TMC4361_V_ACTUAL_REGISTER)
     value = datagram_to_int(datagram[2:])
     return value
 
   def get_target_position(self):
-    datagram = self._spi.readRegister(registers.TMC4361_X_TARGET_REGISTER)
+    datagram = self._spi.readRegister(TMC4361_X_TARGET_REGISTER)
     value = datagram_to_int(datagram[1:])
     return value
 
   def get_target_speed(self):
-    datagram = self._spi.readRegister(registers.TMC4361_V_MAX_REGISTER)
+    datagram = self._spi.readRegister(TMC4361_V_MAX_REGISTER)
     value = datagram_to_int(datagram[1:])
     # 24 bits integer part, 8 bits decimal places
     value = value >> 8
@@ -292,13 +294,13 @@ class TMC4361:
     # unsigned long position_register
     if left:
       endstop_config |= _BV(6)
-      position_register = registers.TMC4361_VIRTUAL_STOP_LEFT_REGISTER
+      position_register = TMC4361_VIRTUAL_STOP_LEFT_REGISTER
       # we doe not latch since we know where they are??
     else:
       endstop_config |= _BV(7)
-      position_register = registers.TMC4361_VIRTUAL_STOP_RIGHT_REGISTER
+      position_register = TMC4361_VIRTUAL_STOP_RIGHT_REGISTER
       # we doe not latch since we know where they are??
-    self.writeRegister(registers.TMC4361_REFERENCE_CONFIG_REGISTER, endstop_config)
+    self.writeRegister(TMC4361_REFERENCE_CONFIG_REGISTER, endstop_config)
     self.writeRegister(position_register, positions)
 
   def getClearedEndStopConfig(left):
@@ -316,9 +318,9 @@ class TMC4361:
     # a trick to ensure the use of all 32 bits
     # TODO make sure we "ensure the use of all 32 bits"
     if left:
-      clearing_pattern = registers.TMC4361_LEFT_ENDSTOP_REGISTER_PATTERN
+      clearing_pattern = TMC4361_LEFT_ENDSTOP_REGISTER_PATTERN
     else: # right
-      clearing_pattern = registers.TMC4361_RIGHT_ENDSTOP_REGISTER_PATTERN
+      clearing_pattern = TMC4361_RIGHT_ENDSTOP_REGISTER_PATTERN
     clearing_pattern = ~ clearing_pattern
     endstop_config &= clearing_pattern
     return endstop_config
@@ -338,6 +340,7 @@ class TMC4361:
     Enable special support for TCM26x drivers.
     See section 10.6 in the TMC4361 datasheet.
     """
+    # Configure SPI Output Conf Register to talk to TMC26x
     # TMC_260_CONFIG 0x8440000a //SPI-Out: block/low/high_time=8/4/4 Takte; CoverLength=autom; TMC26x
     self._spi.write(SPIOutConfRegister()
       .set(SPIOutConfRegister.bits.SPI_OUTPUT_FORMAT, 10)
@@ -347,31 +350,10 @@ class TMC4361:
       .set(SPIOutConfRegister.bits.SPI_OUT_HIGH_TIME, 4)
       .set(SPIOutConfRegister.bits.SPI_OUT_BLOCK_TIME, 8)
     )
-
-    # set260Register(motor_number,motors[motor_number].tmc260.getDriverControlRegisterValue());
-    # set260Register(motor_number,motors[motor_number].tmc260.getChopperConfigRegisterValue());
-    # set260Register(motor_number,motors[motor_number].tmc260.getStallGuard2RegisterValue());
-    # set260Register(motor_number,motors[motor_number].tmc260.getDriverConfigurationRegisterValue() | 0x80);
-
-    # TMC26X register definitions
-    # DRIVER_CONTROL_REGISTER = 0x0
-    # CHOPPER_CONFIG_REGISTER = 0x80000
-    # COOL_STEP_REGISTER = 0xA0000
-    # STALL_GUARD2_LOAD_MEASURE_REGISTER = 0xC0000
-    # DRIVER_CONFIG_REGISTER = 0xE0000
-    # READ_STALL_GUARD_READING = 0x10
-    # # setting the default register values
-    # driver_control_register_value = DRIVER_CONTROL_REGISTER | 0x3 # 32th microstepping
-    # self.transfer_to_tmc2660(driver_control_register_value)
-    # # microsteps = (1 << INITIAL_MICROSTEPPING)
-    # chopper_config_register = CHOPPER_CONFIG_REGISTER
-    # self.transfer_to_tmc2660(chopper_config_register)
-    # cool_step_register_value = COOL_STEP_REGISTER
-    # self.transfer_to_tmc2660(cool_step_register_value)
-    # stall_guard2_current_register_value = STALL_GUARD2_LOAD_MEASURE_REGISTER
-    # self.transfer_to_tmc2660(stall_guard2_current_register_value)
-    # driver_configuration_register_value = DRIVER_CONFIG_REGISTER | READ_STALL_GUARD_READING
-    # self.transfer_to_tmc2660(driver_configuration_register_value)
+    # Initialize TMC26x
+    cover_spi = TMC26xCoverSPI(self._spi)
+    self._tmc26x = TMC26XActivator(spi=cover_spi, dir_pin=0, step_pin=0, current=300, resistor=150)
+    self._tmc26x.start()
 
   def disable_tmc26x(self):
     pass
