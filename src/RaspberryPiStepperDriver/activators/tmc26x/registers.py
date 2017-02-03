@@ -103,7 +103,7 @@ class DriverControlRegister(Register):
   """
   DRVCTRL Register
   """
-  REGISTER = 0x00000
+  REGISTER = 0b00
   bits = AttributeDict({
     # 17 PHA (SPI Mode SDOFF=1)
     # Polarity A Sign of current flow through coil A:
@@ -165,7 +165,7 @@ class ChopperControllRegister(Register):
   """
   Chopper Control Register (CHOPCONF)
   """
-  REGISTER = 0x80000
+  REGISTER = 0b100
   bits = AttributeDict({
     # 16:15 TBL Blanking time Blanking time interval, in system clock periods:
     #   %00: 16
@@ -239,7 +239,7 @@ class CoolStepControlRegister(Register):
   """
   coolStep Control Register (SMARTEN)
   """
-  REGISTER = 0xA0000
+  REGISTER = 0b101
   bits = AttributeDict({
     # 15 SEIMIN Minimum coolStep current
     #   0: 1/2 CS current setting
@@ -282,7 +282,7 @@ class StallGuard2ControlRegister(Register):
   """
   stallGuard2 Control Register (SGCSCONF)
   """
-  REGISTER = 0xC0000
+  REGISTER = 0b110
   bits = AttributeDict({
     # 16 SFILT stallGuard2 filter enable
     #   0: Standard mode, fastest response time.
@@ -312,7 +312,7 @@ class DriverConfigRegister(Register):
   """
   Driver Config Register (DRVCONF)
   """
-  REGISTER = 0xE0000
+  REGISTER = 0b111
   bits = AttributeDict({
     # 16 TST Reserved TEST mode
     #   Must be cleared for normal operation. When set, the

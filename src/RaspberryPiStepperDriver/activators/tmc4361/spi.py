@@ -80,5 +80,4 @@ class TMC26xCoverSPI(activator_spi.SPI):
 
   def write(self, tmc26x_datagram):
     datagram = CoverLowRegister(tmc26x_datagram.datagram)
-    print('sending to tmc26x via cover', tmc26x_datagram.datagram)
     self._spi.write(datagram)

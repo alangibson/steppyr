@@ -250,6 +250,8 @@ class TMC26XActivator(StepDirActivator):
       # and set the t_off time
       # self.chopper_config_register = set_bit(self.chopper_config_register, self.constant_off_time)
       self.chopper_config_register.set(ChopperControllRegister.bits.TOFF, self.constant_off_time)
+    else:
+      self.chopper_config_register.set(ChopperControllRegister.bits.TOFF, 0)
     # if not enabled we don't have to do anything since we already delete t_off from the register
     if self._started:
       self._spi.write(self.chopper_config_register)
