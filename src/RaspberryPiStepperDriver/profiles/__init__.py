@@ -74,8 +74,16 @@ class RampProfile:
     self._acceleration = acceleration
     self.compute_new_speed()
 
+  @property
+  def acceleration(self):
+    return self._acceleration
+
   def set_motor_steps_per_rev(self, steps_per_rev):
     self._motor_steps_per_rev = steps_per_rev
+
+  @property
+  def motor_steps_per_rev(self):
+    return self._motor_steps_per_rev
 
   # FIXME compute _next_step_time_us
   def compute_new_speed(self):
@@ -104,6 +112,10 @@ class RampProfile:
     self._microsteps = microsteps
     self.compute_new_speed()
 
+  @property
+  def microsteps(self):
+    return self._microsteps
+
   def step(self):
     """
     Register a step in the current direction.
@@ -131,6 +143,10 @@ class RampProfile:
     # +ve is clockwise from curent location
     """
     return self._target_steps - self._current_steps
+
+  @property
+  def current_steps(self):
+    return self._current_steps
 
   @property
   def is_moving(self):

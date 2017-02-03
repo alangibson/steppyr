@@ -38,14 +38,14 @@ class StepperDriver:
     """
     Immediately stop the current move.
     """
-    self._profile.set_current_position(self._profile._current_steps)
+    self._profile.set_current_position(self._profile.current_steps)
 
   def move(self, relative_steps):
     """
     Schedules move to a number of steps relative to the current step count.
     TODO copied from AccelStepper
     """
-    self.move_to(self._profile._current_steps + relative_steps)
+    self.move_to(self._profile.current_steps + relative_steps)
 
   def move_to(self, absolute_steps):
     """
@@ -59,7 +59,7 @@ class StepperDriver:
     """
     Rotate motor a given number of degrees.
     """
-    self.move(calc_degrees_to_steps(degrees, self._profile._motor_steps_per_rev, self._profile._microsteps))
+    self.move(calc_degrees_to_steps(degrees, self._profile.motor_steps_per_rev, self._profile.microsteps))
 
   async def run_forever(self):
     """
@@ -131,7 +131,7 @@ class StepperDriver:
     """
     Convenience function for any code that may want to know how many steps we will go
     """
-    return target_steps - self._profile._current_steps
+    return target_steps - self._profile.current_steps
 
   def predict_direction(self, target_steps):
     """
@@ -174,11 +174,11 @@ class StepperDriver:
 
   @property
   def position(self):
-    return self._profile._current_steps
+    return self._profile.current_steps
 
   @property
   def direction(self):
-    return self._profile._direction
+    return self._profile.direction
 
   @property
   def distance_to_go(self):
@@ -190,7 +190,7 @@ class StepperDriver:
 
   @property
   def acceleration(self):
-    return self._profile._acceleration
+    return self._profile.acceleration
 
   def set_acceleration(self, acceleration):
     """
@@ -205,8 +205,8 @@ class StepperDriver:
   #
 
   def step(self, direction):
-    log.debug('stepping: current_steps=%s direction=%s', self._profile._current_steps, self._profile._direction)
-    self._activator.step(self._profile._direction)
+    log.debug('stepping: current_steps=%s direction=%s', self._profile.current_steps, self._profile.direction)
+    self._activator.step(self._profile.direction)
 
   def set_pulse_width(self, pulse_width_us):
     """
