@@ -72,6 +72,16 @@ def lsb(x):
   """
   return ( x & -x).bit_length() - 1
 
+def bits(n):
+  """
+  Returns position of all bits = 1.
+  http://stackoverflow.com/questions/8898807/pythonic-way-to-iterate-over-bits-of-integer
+  """
+  while n:
+    b = n & (~n+1)
+    yield b
+    n ^= b
+
 def tobin(x, n=8):
   """
   Returns a space separated string of bin representing byte input.

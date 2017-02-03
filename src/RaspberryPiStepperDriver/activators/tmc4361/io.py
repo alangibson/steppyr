@@ -91,9 +91,10 @@ class Datagram:
     """
     Clone ourselves as a response.
     """
-    header = datagram_list[0]
-    data = datagram_to_int(datagram_list[1:])
-    return type(self)(header=header, data=data)
+    # header = datagram_list[0]
+    # data = datagram_to_int(datagram_list[1:])
+    # return type(self)(header, data)
+    return type(self)(datagram_to_int(datagram_list))
 
 class Status:
   """

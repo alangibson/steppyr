@@ -14,9 +14,6 @@ class StepperDriver:
   def __init__(self, activator, profile):
     self._activator = activator
     self._profile = profile
-    # Time in microseconds that last step occured
-    # self._last_step_time_us = 0
-    # self._next_step_time_us = None
 
   def start(self):
     """
@@ -24,7 +21,6 @@ class StepperDriver:
     Implementing classes should use this method to initialize the hardware.
     """
     self._activator.start()
-    # self._run_forever_future = asyncio.ensure_future(self.run_forever())
 
   def stop(self):
     """
@@ -32,7 +28,6 @@ class StepperDriver:
     Implementing classes should use this method to deactivate the hardware.
     """
     self._activator.stop()
-    # self._run_forever_future.cancel()
 
   def abort(self):
     """
@@ -52,8 +47,6 @@ class StepperDriver:
     Schedules move to an absolute number of steps.
     """
     self._profile.set_target_steps(absolute_steps)
-    # If we don't have a next_step_time_us, we will never take a step in the run* loop
-    # self._next_step_time_us = micros() + self._profile._step_interval_us
 
   def rotate(self, degrees):
     """
@@ -90,16 +83,6 @@ class StepperDriver:
     # if not self._profile.step_interval_us or not self._profile.distance_to_go:
     #   return False
 
-    # Save the current time in microseconds
-    # current_time_us = micros()
-
-    # Note: because we save _next_step_time_us, a new _step_interval_us won't
-    # be taken into account until after the next step is done. We could also
-    # use this logic to constantly recalculate the next step time:
-    # next_step_time_us = self._last_step_time_us + self._profile._step_interval_us
-    # if current_time_us >= next_step_time_us:
-
-    # if self._next_step_time_us and current_time_us >= self._next_step_time_us:
     if self._profile.should_step():
       # It is time to do a step
 
@@ -109,9 +92,6 @@ class StepperDriver:
       # Tell profile we are taking a step
       self._profile.step()
 
-      # Record new time parameters
-      # self._last_step_time_us = current_time_us
-      # self._next_step_time_us = current_time_us + self._profile._step_interval_us
     # else: Do nothing
     return self._profile.is_moving
 
@@ -141,7 +121,7 @@ class StepperDriver:
 
   def set_microsteps(self, microsteps):
     self._activator.set_microsteps(microsteps)
-    # recalculate the stepping delay by simply setting the speed again
+    self._profile.set_microsteps(microsteps)
     self._profile.compute_new_speed()
 
   @property

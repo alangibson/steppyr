@@ -8,12 +8,8 @@ from RaspberryPiStepperDriver.activators.tmc4361.io import Datagram
 WRITE_MASK = 0x80 # register | WRITE_MASK
 READ_MASK = 0x7F # register & READ_MASK
 
-# General Configuration Register
-TMC4361_GENERAL_CONFIG_REGISTER = 0x0
-
 # Reference Switch Configuration Register
 TMC4361_REFERENCE_CONFIG_REGISTER = 0x01
-
 # RW. Start Switch Configuration Register
 # Bit 4:0. start_en
 #   xxxx1 Alteration of XTARGET value requires distinct start signal.
@@ -59,30 +55,9 @@ TMC4361_REFERENCE_CONFIG_REGISTER = 0x01
 #     X_PIPEx in the case of an internal start signal generation and if assigned in this
 #     register with a ‘1’:
 TMC4361_START_CONFIG_REGISTER = 0x2
-
-TMC4361_INPUT_FILTER_REGISTER = 0x3
-
-# SPI Output Configuration Register
-TMC4361_SPIOUT_CONF_REGISTER = 0x04
-
 TMC4361_ENCODER_INPUT_CONFIG_REGISTER = 0x07
-TMC4361_STEP_CONF_REGISTER = 0x0A
-
-# Event Selection Registers
-# RW. Bit 31:0. Events selection for SPI datagrams: Event bits of EVENTS
-#   register 0x0E that are selected (=1) in this register are forwarded to the
-#   eight status bits that are transferred with every SPI datagram (first eight
-#   bits from LSB are significant!).
-TMC4361_SPI_STATUS_SELECTION_REGISTER = 0x0B
 TMC4361_EVENT_CLEAR_CONF_REGISTER = 0x0c
 TMC4361_INTERRUPT_CONFIG_REGISTER = 0x0d
-
-# Status Event Register
-TMC4361_EVENTS_REGISTER = 0x0e
-
-# Status Flag Register
-TMC4361_STATUS_REGISTER = 0x0f
-
 # Various Configuration Registers: S/D, Synchronization, etc.
 TMC4361_STP_LENGTH_ADD_REGISTER = 0x10
 TMC4361_START_OUT_ADD_REGISTER = 0x11
@@ -90,9 +65,6 @@ TMC4361_GEAR_RATIO_REGISTER = 0x12
 # RW. Bits 31:0. START_DELAY.
 #   Delay time [# clock cycles] between start trigger and internal start signal release.
 TMC4361_START_DELAY_REGISTER = 0x13
-
-# Ramp Generator Registers
-TMC4361_RAMP_MODE_REGISTER = 0x20
 # RW. Current internal microstep position; signed; 32 bits
 # RW. Bit 0:31. Actual internal motor position [pulses]: –2^31 ≤ XACTUAL ≤ 2^31 – 1
 TMC4361_X_ACTUAL_REGISTER = 0x21
@@ -121,10 +93,30 @@ TMC4361_BOW_2_REGISTER = 0x2e
 TMC4361_BOW_3_REGISTER = 0x2f
 # RW. Fourth bow value of a complete velocity ramp; unsigned; 24 bits=24+0.
 TMC4361_BOW_4_REGISTER = 0x30
-
-# External Clock Frequency Register
-# RW. External clock frequency fCLK; unsigned; 25 bits.
-TMC4361_CLK_FREQ_REGISTER = 0x31
+# 23:0 ASTART (Default: 0x000000)
+#   S-shaped ramp motion profile: start acceleration value.
+#   Trapezoidal ramp motion profile:
+#     Acceleration value in case |VACTUAL| < VBREAK.
+#     Acceleration value after switching from external to internal step control.
+#   Value representation:
+#     Frequency mode: [pulses per sec2] 22 digits and 2 decimal places: 250 mpps2 ≤ ASTART ≤ 4 Mpps2
+#     Direct mode: [∆v per clk cycle]
+#       a[∆v per clk_cycle]= ASTART / 237
+#       ASTART [pps2] = ASTART / 237 • fCLK2
+#       Consider maximum values, represented in section 6.7.5, page 50
+# 31 Sign of AACTUAL after switching from external to internal step control.
+TMC4361_A_START_REGISTER = 0x2A
+# 23:0 DFINAL (Default: 0x000000)
+#   S-shaped ramp motion profile: Stop deceleration value, which is not used during positioning mode.
+#   Trapezoidal ramp motion profile:
+#     Deceleration value in case |VACTUAL| < VBREAK.
+#   Value representation:
+#     Frequency mode: [pulses per sec2]22 digits and 2 decimal places: 250 mpps2 ≤ DFINAL ≤ 4 Mpps2
+#   Direct mode: [∆v per clk cycle]
+#     d[∆v per clk_cycle]= DFINAL / 237
+#     DFINAL [pps2] = DFINAL / 237 • fCLK2
+#     Consider maximum values, represented in section 6.7.5, page 50
+TMC4361_D_FINAL_REGISTER = 0x2B
 
 # Target and Compare Registers
 TMC4361_POSITION_COMPARE_REGISTER = 0x32
@@ -133,9 +125,7 @@ TMC4361_VIRTUAL_STOP_RIGHT_REGISTER = 0x34
 TMC4361_X_LATCH_REGISTER = 0x36
 # RW. Target position; signed; 32 bits.
 TMC4361_X_TARGET_REGISTER = 0x37
-
 TMC4361_X_TARGET_PIPE_0_REGSISTER = 0x38
-
 # Shadow Register
 #   Some applications require a complete new ramp parameter set for a specific ramp
 #   situation / point in time. TMC4361A provides up to 14 shadow registers, which
@@ -154,30 +144,14 @@ TMC4361_SH_BOW_2_REGISTER = 0x49
 TMC4361_SH_BOW_3_REGISTER = 0x4A
 TMC4361_SH_BOW_4_REGISTER = 0x4B
 TMC4361_SH_RAMP_MODE_REGISTER = 0x4C
-
-# Reset and Clock Gating Register
-TMC4361_RESET_CLK_GATING_REGISTER = 0x4F
-
 TMC4361_ENCODER_POSITION_REGISTER = 0x50
 TMC4361_ENCODER_INPUT_RESOLUTION_REGISTER = 0x54
-TMC4361_COVER_LOW_REGISTER = 0x6C
 TMC4361_COVER_HIGH_REGISTER = 0x6D
-TMC4361_COVER_DRV_LOW_REGISTER = 0x6E
 TMC4361_COVER_DRV_HIGH_REGISTER = 0x6F
 
 # how to mask REFERENCE_CONFIG_REGISTER if you want to configure just one end
 TMC4361_LEFT_ENDSTOP_REGISTER_PATTERN = (_BV(0) | _BV(2) | _BV(6) | _BV(10) | _BV(11) | _BV(14))
 TMC4361_RIGHT_ENDSTOP_REGISTER_PATTERN = (_BV(1) | _BV(3) | _BV(7) | _BV(12) | _BV(13) | _BV(15))
-
-def bits(n):
-  """
-  Returns position of all bits = 1.
-  http://stackoverflow.com/questions/8898807/pythonic-way-to-iterate-over-bits-of-integer
-  """
-  while n:
-    b = n & (~n+1)
-    yield b
-    n ^= b
 
 class AttributeDict(dict):
   __getattr__ = dict.__getitem__
@@ -212,7 +186,7 @@ class Register(Datagram):
 class StatusEventRegister(Register):
   """
   """
-  REGISTER = TMC4361_EVENTS_REGISTER
+  REGISTER = 0x0E
   bits = AttributeDict({
     # TARGET_REACHED has been triggered
     'TARGET_REACHED': _BV(0),
@@ -288,11 +262,11 @@ class SpiStatusSelectionRegister(Register):
   forwarded to the eight status bits that are transferred with every SPI datagram (first
   eight bits from LSB are significant!).
   """
-  REGISTER = TMC4361_SPI_STATUS_SELECTION_REGISTER
+  REGISTER = 0x0B
   bits = StatusEventRegister.bits
 
 class GeneralConfigurationRegister(Register):
-  REGISTER = TMC4361_GENERAL_CONFIG_REGISTER
+  REGISTER = 0x0
   bits = AttributeDict({
     # use_astart_and_vstart (only valid for S-shaped ramps)
     # 0 Sets AACTUAL = AMAX or –AMAX at ramp start and in the case of VSTART ≠ 0.
@@ -396,7 +370,7 @@ class RampModeRegister(Register):
   """
   Ramp operation mode and motion profile.
   """
-  REGISTER = TMC4361_RAMP_MODE_REGISTER
+  REGISTER = 0x20
   bits = AttributeDict({
     # Bit 1:0: Motion Profile:
     #   0: No ramp: VACTUAL follows only VMAX (rectangle velocity shape).
@@ -410,14 +384,14 @@ class RampModeRegister(Register):
   })
 
 class ExternalClockFrequencyRegister(Register):
-  REGISTER = TMC4361_CLK_FREQ_REGISTER
+  REGISTER = 0x31
   bits = AttributeDict({
     # RW. External clock frequency fCLK; unsigned; 25 bits.
     'EXTERNAL_CLOCK_FREQUENCY': mask(0, 24)
   })
 
 class MotorDriverSettingsRegister(Register):
-  REGISTER = TMC4361_STEP_CONF_REGISTER
+  REGISTER = 0x0A
   bits = AttributeDict({
     # 3:0 Highest microsteps resolution: 256 microsteps per fullstep.
     # Set to 256 for closed-loop operation.
@@ -443,7 +417,7 @@ class MotorDriverSettingsRegister(Register):
   })
 
 class StatusFlagRegister(Register):
-  REGISTER = TMC4361_STATUS_REGISTER
+  REGISTER = 0x0F
   bits = AttributeDict({
     # 0 TARGET_REACHED_F is set high if XACTUAL = XTARGET
     'TARGET_REACHED_F': _BV(0),
@@ -516,7 +490,7 @@ class StatusFlagRegister(Register):
   })
 
 class SPIOutConfRegister(Register):
-  REGISTER = TMC4361_SPIOUT_CONF_REGISTER
+  REGISTER = 0x04
   bits = AttributeDict({
     # RW. Bit 3:0. spi_output_format
     #   0 SPI output interface is off.
@@ -633,7 +607,7 @@ class CoverLowRegister(Register):
   """
   This register is write-only COVER_LOW and read-only POLLING_STATUS.
   """
-  REGISTER = TMC4361_COVER_LOW_REGISTER
+  REGISTER = 0x6C
   bits = AttributeDict({
     'COVER_LOW_OR_POLLING_STATUS': mask(0, 31)
   })
@@ -643,7 +617,7 @@ class CoverDriverLowRegister(Register):
   Lower configuration bits of SPI response received from the motor driver connected to
   the SPI output.
   """
-  REGISTER = TMC4361_COVER_DRV_LOW_REGISTER
+  REGISTER = 0x6E
   bits = AttributeDict({
     # 31:0 (Default:0x00000000)
     # Lower configuration bits of SPI response received from the motor driver
@@ -652,7 +626,7 @@ class CoverDriverLowRegister(Register):
   })
 
 class ResetClockAndGatingRegister(Register):
-  REGISTER = TMC4361_RESET_CLK_GATING_REGISTER
+  REGISTER = 0x4F
   bits = AttributeDict({
     # RW. Bit 2:0.
     #   0 Clock gating is not activated.
@@ -663,3 +637,7 @@ class ResetClockAndGatingRegister(Register):
     #  0x525354 Internal reset is activated.
     'RESET_REG': mask(8, 31)
   })
+
+# TODO finish this
+class InputFilterRegister(Register):
+  REGISTER = 0x3

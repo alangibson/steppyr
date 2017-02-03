@@ -53,6 +53,22 @@ TMC26X example code:
     # stepper.set_acceleration(40000) # steps per second per second
     # stepper.set_pulse_width(2) # microseconds
 
+TMC4361 example code:
+
+    from RaspberryPiStepperDriver.drivers import StepperDriver
+    from RaspberryPiStepperDriver.activators.tmc4361.driver import TMC4361
+    from RaspberryPiStepperDriver.activators.tmc4361.spi import SPI
+
+    spi = SPI(bus=0, device=1)
+    tmc4361 = TMC4361(
+      spi=spi,
+      reset_pin=26
+    )
+    driver = StepperDriver(
+      activator=tmc4361,
+      profile=tmc4361
+    )
+
 For all other STEP/DIR drivers.
 
     TODO

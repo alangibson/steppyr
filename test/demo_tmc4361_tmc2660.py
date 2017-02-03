@@ -7,22 +7,23 @@ from RaspberryPiStepperDriver.activators.tmc4361.driver import *
 from RaspberryPiStepperDriver.activators.tmc4361.spi import SPI as TMC4361SPI
 
 # logging.config.fileConfig('logging.ini')
-logging.basicConfig(level=logging.DEBUG)
+logging.basicConfig(level=logging.INFO)
 log = logging.getLogger(__name__)
 
 spi1 = TMC4361SPI(bus=0, device=1)
 tmc4361 = TMC4361(
   spi=spi1,
-  start_signal_pin=0,
-  target_reached_interrupt_pin=0
+  reset_pin=26
 )
 tmc4361.start()
 tmc4361.set_microsteps(1)
+tmc4361.set_target_speed(5000)
 
 tmc4361.enable_tmc26x()
-tmc4361._tmc26x.set_current(1000)
+tmc4361.tmc26x.set_current(1000)
 
-tmc4361.move_to(10000, v_max=5000)
+# set_target_steps() aka move_to()
+tmc4361.set_target_steps(10000)
 
 try:
   for i in range(0,10):
@@ -34,7 +35,6 @@ try:
     print('    get_current_position', tmc4361.get_current_position())
     print('    get_target_speed', tmc4361.get_target_speed())
     print('    get_tmc2660_response', tmc4361.get_tmc2660_response().data)
-    # print('    transfer_to_tmc2660', tmc4361.transfer_to_tmc2660(0b00000000000000000000).data)
     sleep_microseconds(500000)
 except Exception as e:
   print(e)
