@@ -72,7 +72,7 @@ SPI_OUT_CONFIG_SPI_OUTPUT_FORMAT_TMC26X_SD = 0b1011
 # _BV(0) x_target requires start
 # _BV(4) use shaddow motion profiles
 #  _BV(5) external start is an start
-default_4361_start_config = 0 | _BV(0) | _BV(4) | _BV(5)
+# default_4361_start_config = 0 | _BV(0) | _BV(4) | _BV(5)
 
 class TMC4361:
 
@@ -84,12 +84,24 @@ class TMC4361:
     self._reset_pin = 26
     # TODO make configurable
     GPIO.setmode(GPIO.BCM)
+    # Initialize Registers
+    self.spi_status_selection_register = SpiStatusSelectionRegister()
+    self.general_configuration_register = GeneralConfigurationRegister()
+    self.ramp_mode_register = RampModeRegister()
+    self.external_clock_frequency_register = ExternalClockFrequencyRegister(CLOCK_FREQUENCY)
+    self.motor_driver_settings_register = MotorDriverSettingsRegister()
+
+  #
+  # Activator API methods
+  #
 
   def start(self):
     """
     "Per default, the voltage level transition from high to low triggers a start
     signal (START is an input), or START output indicates an active START event
     by switching from high to low level." Datasheet 9.1.3
+
+    Implements Activator.start() method.
     """
     GPIO.setup(self._reset_pin, GPIO.OUT)
     # GPIO.setup(self._start_signal_pin, GPIO.OUT)
@@ -113,13 +125,13 @@ class TMC4361:
     # Select the events we want reported with every status code.
     # see datasheet 19.13-19.14
     # Old api: self._spi.writeRegister(registers.TMC4361_SPI_STATUS_SELECTION_REGISTER, 0 | _BV(0) | _BV(1))
-    self._spi.write(SpiStatusSelectionRegister()
+    self._spi.write(self.spi_status_selection_register
       .set(StatusEventRegister.bits.TARGET_REACHED)
       .set(StatusEventRegister.bits.POS_COMP_REACHED)
     )
 
     # self._spi.writeRegister(registers.TMC4361_GENERAL_CONFIG_REGISTER, 0 | _BV(5) | GENERAL_CONF_SERIAL_ENC_OUT_ENABLE)
-    self._spi.write(GeneralConfigurationRegister()
+    self._spi.write(self.general_configuration_register
       .set(GeneralConfigurationRegister.bits.POL_DIR_OUT)
     )
 
@@ -128,7 +140,7 @@ class TMC4361:
     # self._spi.writeRegister(registers.TMC4361_SH_RAMP_MODE_REGISTER, RAMP_MODE_POSITIONING_MODE | RAMP_MODE_S_SHAPED_RAMP)
     # Section 6.3.4 No Ramp Motion Profile
     # self._spi.writeRegister(registers.TMC4361_RAMP_MODE_REGISTER, RAMP_MODE_POSITIONING_MODE | RAMP_MODE_NO_RAMP)
-    self._spi.write(RampModeRegister()
+    self._spi.write(self.ramp_mode_register
       # .set(RampModeRegister.bits.MOTION_PROFILE, 2) # S-shaped ramp
       .set(RampModeRegister.bits.MOTION_PROFILE, 0) # no ramp
       .set(RampModeRegister.bits.OPERATION_MODE, 1) # positioning mode
@@ -136,7 +148,7 @@ class TMC4361:
     # TODO ? self._spi.writeRegister(registers.TMC4361_SH_RAMP_MODE_REGISTER, RAMP_MODE_POSITIONING_MODE | RAMP_MODE_NO_RAMP)
 
     # self._spi.writeRegister(registers.TMC4361_CLK_FREQ_REGISTER, CLOCK_FREQUENCY)
-    self._spi.write(ExternalClockFrequencyRegister(CLOCK_FREQUENCY))
+    self._spi.write(self.external_clock_frequency_register)
 
     # NEEDED so THAT THE SQUIRREL CAN RECOMPUTE EVERYTHING!
     # self._spi.writeRegister(registers.TMC4361_START_DELAY_REGISTER, 512)
@@ -150,32 +162,150 @@ class TMC4361:
     # self._spi.writeRegister(registers.TMC4361_INPUT_FILTER_REGISTER, filter)
 
   def stop(self):
+    """
+    Implements Activator.stop() method.
+    """
+    self.disable_tmc26x()
     self.reset(hard=True)
 
-  def abort(self):
-    # TODO In order to stop the motion during positioning, do as follows:
-    # Action: Set VMAX = 0 (register 0x24).
+  def enable(self):
+    """
+    Implements Activator.enable() method.
+    """
+    # TODO implement
+    pass
+
+  def disable(self):
+    """
+    Implements Activator.disable() method.
+    """
+    # TODO implement
+    pass
+
+  def step(self, direction):
+    """
+    Implements Activator.step(direction) method.
+    """
+    pass
+
+  # FIXME need to do lookup for microsteps
+  def set_microsteps(self, microsteps):
+    """
+    Implements Activator.set_microsteps(microsteps) method.
+    Implements Profile.set_microsteps(microsteps) method.
+    """
+    self._spi.write(self.motor_driver_settings_register
+      .set(MotorDriverSettingsRegister.bits.MSTEP_PER_FS, 8) # full stepping
+    )
+
+  @property
+  def pulse_width(self):
+    """
+    Implements Activator.pulse_width method.
+    """
+    return 0
+
+  def set_pulse_width(self, pulse_width_us):
+    """
+    Implements Activator.set_pulse_width(pulse_width_us) method.
+    """
+    pass
+
+  #
+  # Profile API methods
+  #
+
+  def set_target_speed(self, speed):
+    """
+    Implements Profile.set_target_speed(speed) method.
+    """
+    # TODO Implement
+    pass
+
+  def set_target_steps(self, absolute_steps):
+    """
+    Implements Profile.set_target_steps(absolute_steps) method.
+    """
+    # TODO Implement
+    pass
+
+  def set_acceleration(self, acceleration):
+    """
+    Implements Profile.set_acceleration(acceleration) method.
+    """
+    # TODO Implement
     pass
 
   def set_motor_steps_per_rev(self, steps_per_rev):
+    """
+    Implements Profile.set_motor_steps_per_rev(steps_per_rev) method.
+    """
     self._motor_steps_per_rev = steps_per_rev
     # Configure the motor type
-    # FIXME dont asume 0 microsteps
     # unsigned long motorconfig
     # motorconfig = 0x00 # we want 256 microsteps
     # motorconfig |= steps_per_rev << 4
     # self._spi.writeRegister(registers.TMC4361_STEP_CONF_REGISTER, motorconfig)
-    self._spi.write(MotorDriverSettingsRegister()
-      .set(MotorDriverSettingsRegister.bits.MSTEP_PER_FS, 8) # full stepping
+    self._spi.write(self.motor_driver_settings_register
       .set(MotorDriverSettingsRegister.bits.FS_PER_REV, 200) # 1.8 degree per step
     )
 
+  def set_current_position(self, position):
+    """
+    Implements Profile.set_current_position(position) method.
+    """
+    # TODO Implement
+    pass
+
+  def step(self):
+    """
+    Implements Profile.step() method.
+    """
+    # TODO Implement
+    pass
+
+  @property
+  def distance_to_go(self):
+    """
+    Implements Profile.distance_to_go method.
+    """
+    # TODO Implement
+    pass
+
+  @property
+  def is_moving(self):
+    """
+    Implements Profile.is_moving method.
+    """
+    # TODO Implement
+    pass
+
+  @property
+  def direction(self):
+    """
+    Implements Profile.direction method.
+    """
+    # TODO Implement
+    pass
+
+  #
+  # StepperDriver API methods
+  #
+
+  def abort(self):
+    """
+    Implements StepperDriver.abort() method.
+    """
+    # TODO In order to stop the motion during positioning, do as follows:
+    # Action: Set VMAX = 0 (register 0x24).
+    pass
+
   # TODO const char homeMotorTMC4361
 
-  def move_to(self, position):
+  # TODO remove v_max
+  def move_to(self, position, v_max=500):
     """
-    Arguments:
-    long position
+    Implements StepperDriver.move_to(position) method.
     """
     # TODO if we are already at the target, do nothing
 
@@ -187,7 +317,6 @@ class TMC4361:
     # self._spi.writeRegister(registers.TMC4361_V_MAX_REGISTER, 0)
 
     # 24 bits integer part, 8 bits decimal places
-    v_max = 500
     v_max = v_max << 8
     self._spi.writeRegister(registers.TMC4361_V_MAX_REGISTER, v_max)
     self._spi.writeRegister(registers.TMC4361_X_TARGET_REGISTER, position)
@@ -197,6 +326,10 @@ class TMC4361:
 
     # Put the start register back the way it was
     # FIXME self._spi.writeRegister(registers.TMC4361_START_CONFIG_REGISTER, oldStartRegister)
+
+  #
+  # Non-API methods
+  #
 
   def update_move(self):
     # FIXME What is this code supposed to be doing?
@@ -339,6 +472,7 @@ class TMC4361:
     See section 10.6 in the TMC4361 datasheet.
     """
     # TMC_260_CONFIG 0x8440000a //SPI-Out: block/low/high_time=8/4/4 Takte; CoverLength=autom; TMC26x
+    log.debug('Setting SPIOutConfRegister for TCM26x')
     self._spi.write(SPIOutConfRegister()
       .set(SPIOutConfRegister.bits.SPI_OUTPUT_FORMAT, 10)
       .set(SPIOutConfRegister.bits.COVER_DATA_LENGTH, 0)
@@ -347,34 +481,15 @@ class TMC4361:
       .set(SPIOutConfRegister.bits.SPI_OUT_HIGH_TIME, 4)
       .set(SPIOutConfRegister.bits.SPI_OUT_BLOCK_TIME, 8)
     )
-
-    # set260Register(motor_number,motors[motor_number].tmc260.getDriverControlRegisterValue());
-    # set260Register(motor_number,motors[motor_number].tmc260.getChopperConfigRegisterValue());
-    # set260Register(motor_number,motors[motor_number].tmc260.getStallGuard2RegisterValue());
-    # set260Register(motor_number,motors[motor_number].tmc260.getDriverConfigurationRegisterValue() | 0x80);
-
-    # TMC26X register definitions
-    # DRIVER_CONTROL_REGISTER = 0x0
-    # CHOPPER_CONFIG_REGISTER = 0x80000
-    # COOL_STEP_REGISTER = 0xA0000
-    # STALL_GUARD2_LOAD_MEASURE_REGISTER = 0xC0000
-    # DRIVER_CONFIG_REGISTER = 0xE0000
-    # READ_STALL_GUARD_READING = 0x10
-    # # setting the default register values
-    # driver_control_register_value = DRIVER_CONTROL_REGISTER | 0x3 # 32th microstepping
-    # self.transfer_to_tmc2660(driver_control_register_value)
-    # # microsteps = (1 << INITIAL_MICROSTEPPING)
-    # chopper_config_register = CHOPPER_CONFIG_REGISTER
-    # self.transfer_to_tmc2660(chopper_config_register)
-    # cool_step_register_value = COOL_STEP_REGISTER
-    # self.transfer_to_tmc2660(cool_step_register_value)
-    # stall_guard2_current_register_value = STALL_GUARD2_LOAD_MEASURE_REGISTER
-    # self.transfer_to_tmc2660(stall_guard2_current_register_value)
-    # driver_configuration_register_value = DRIVER_CONFIG_REGISTER | READ_STALL_GUARD_READING
-    # self.transfer_to_tmc2660(driver_configuration_register_value)
+    # Initialize TMC26x
+    log.debug('Initializing TCM26x')
+    cover_spi = TMC26xCoverSPI(self._spi)
+    self.tmc26x = TMC26XActivator(spi=cover_spi, dir_pin=0, step_pin=0, current=300, resistor=150)
+    self.tmc26x.start()
 
   def disable_tmc26x(self):
-    pass
+    if self.tmc26x:
+      self.tmc26x.stop()
 
   def transfer_to_tmc2660(self, datagram):
     """
