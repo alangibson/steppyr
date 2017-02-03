@@ -1,5 +1,5 @@
 import unittest
-from RaspberryPiStepperDriver.motion.tmc4361 import io
+from RaspberryPiStepperDriver.activators.tmc4361 import io
 
 class TestDatagram(unittest.TestCase):
 

@@ -1,5 +1,5 @@
 import unittest
-from RaspberryPiStepperDriver.motion.tmc4361.registers import mask, \
+from RaspberryPiStepperDriver.activators.tmc4361.registers import mask, \
   StatusEventRegister, SpiStatusSelectionRegister, ExternalClockFrequencyRegister
 
 class TestRegisters(unittest.TestCase):
