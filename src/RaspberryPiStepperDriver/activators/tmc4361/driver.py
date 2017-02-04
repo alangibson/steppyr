@@ -208,7 +208,8 @@ class TMC4361:
     # "22 digits and 2 decimal places:"
     # self._spi.writeRegister(TMC4361_A_MAX_REGISTER, acceleration << 2)
     # self._spi.writeRegister(TMC4361_D_MAX_REGISTER, acceleration << 2)
-    self.a_max_register.set(AMaxRegister.bits.AMAX, acceleration)
+    self._spi.write(self.a_max_register.set(AMaxRegister.bits.AMAX, acceleration))
+    self._spi.write(self.d_max_register.set(DMaxRegister.bits.DMAX, acceleration))
 
   def set_motor_steps_per_rev(self, steps_per_rev):
     """
