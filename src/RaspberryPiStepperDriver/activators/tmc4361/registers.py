@@ -269,7 +269,7 @@ class DMaxRegister(Register):
     #   Direct mode: [∆v per clk cycle]
     #     d[∆v per clk_cycle]= DMAX / 237
     #     DMAX [pps2] = DMAX / 237 • fCLK2
-    'DMAX': mask(0, 23)
+    'DMAX': {'bitmask': mask(0, 23), 'format': Representation(22, 2, False)}
   })
 # RW. First bow value of a complete velocity ramp; unsigned; 24 bits=24+0 (24 bits integer part, no decimal places).
 class Bow1Register(Register):
@@ -336,12 +336,14 @@ class AStartRegister(Register):
     #     Acceleration value in case |VACTUAL| < VBREAK.
     #     Acceleration value after switching from external to internal step control.
     #   Value representation:
-    #     Frequency mode: [pulses per sec2] 22 digits and 2 decimal places: 250 mpps2 ≤ ASTART ≤ 4 Mpps2
+    #     Frequency mode: [pulses per sec2]
+    #       22 digits and 2 decimal places: 250 mpps2 ≤ ASTART ≤ 4 Mpps2
+    #       unsigned; 24 bits=22+2
     #     Direct mode: [∆v per clk cycle]
     #       a[∆v per clk_cycle]= ASTART / 237
     #       ASTART [pps2] = ASTART / 237 • fCLK2
     #       Consider maximum values, represented in section 6.7.5, page 50
-    'ASTART': mask(0, 23),
+    'ASTART': {'bitmask': mask(0, 23), 'format': Representation(22, 2, False)},
     # RW 31 Sign of AACTUAL after switching from external to internal step control.
     'AACTUAL_SIGN': _BV(31)
   })
@@ -353,12 +355,13 @@ class DFinalRegister(Register):
     #   Trapezoidal ramp motion profile:
     #     Deceleration value in case |VACTUAL| < VBREAK.
     #   Value representation:
-    #     Frequency mode: [pulses per sec2]22 digits and 2 decimal places: 250 mpps2 ≤ DFINAL ≤ 4 Mpps2
-    #   Direct mode: [∆v per clk cycle]
-    #     d[∆v per clk_cycle]= DFINAL / 237
-    #     DFINAL [pps2] = DFINAL / 237 • fCLK2
-    #     Consider maximum values, represented in section 6.7.5, page 50
-    'DFINAL': mask(0, 23)
+    #     Frequency mode: [pulses per sec2]
+    #       22 digits and 2 decimal places: 250 mpps2 ≤ DFINAL ≤ 4 Mpps2
+    #       unsigned; 24 bits=22+2
+    #     Direct mode: [∆v per clk cycle]
+    #       d[∆v per clk_cycle]= DFINAL / 237
+    #       DFINAL [pps2] = DFINAL / 237 • fCLK2
+    'DFINAL': {'bitmask': mask(0, 23), 'format': Representation(22, 2, False)}
   })
 
 # Target and Compare Registers
