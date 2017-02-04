@@ -40,6 +40,37 @@ class TMC4361:
     self.ramp_mode_register = RampModeRegister()
     self.external_clock_frequency_register = ExternalClockFrequencyRegister(CLOCK_FREQUENCY)
     self.motor_driver_settings_register = MotorDriverSettingsRegister()
+    self.v_max_register = VMaxRegister()
+    self.v_break_register = VBreakRegister()
+    self.a_max_register = AMaxRegister()
+    self.d_max_register = DMaxRegister()
+    self.v_start_register = VStartRegister()
+    self.v_stop_register = VStopRegister()
+    self.bow1_register = Bow1Register()
+    self.bow2_register = Bow2Register()
+    self.bow3_register = Bow3Register()
+    self.bow4_register = Bow4Register()
+    self.a_start_register = AStartRegister()
+    self.d_final_register = DFinalRegister()
+
+  def flush_registers(self):
+    self._spi.write(self.spi_status_selection_register)
+    self._spi.write(self.general_configuration_register)
+    self._spi.write(self.ramp_mode_register)
+    self._spi.write(self.external_clock_frequency_register)
+    self._spi.write(self.motor_driver_settings_register)
+    self._spi.write(self.v_max_register)
+    self._spi.write(self.v_break_register)
+    self._spi.write(self.a_max_register)
+    self._spi.write(self.d_max_register)
+    self._spi.write(self.v_start_register)
+    self._spi.write(self.v_stop_register)
+    self._spi.write(self.bow1_register)
+    self._spi.write(self.bow2_register)
+    self._spi.write(self.bow3_register)
+    self._spi.write(self.bow4_register)
+    self._spi.write(self.a_start_register)
+    self._spi.write(self.d_final_register)
 
   #
   # Activator API methods
@@ -68,7 +99,7 @@ class TMC4361:
 
     # Set positioning and ramp shape
     # Section 6.3.4 No Ramp Motion Profile
-    self.set_ramp_scurve()
+    # self.set_ramp_scurve()
 
     # TODO ? self._spi.writeRegister(registers.TMC4361_SH_RAMP_MODE_REGISTER, RAMP_MODE_POSITIONING_MODE | RAMP_MODE_NO_RAMP)
 
@@ -149,8 +180,9 @@ class TMC4361:
     """
     self._target_speed = speed
     # 24 bits integer part, 8 bits decimal places
-    v_max = speed << 8
-    self._spi.writeRegister(TMC4361_V_MAX_REGISTER, v_max)
+    # v_max = speed << 8
+    # self._spi.writeRegister(TMC4361_V_MAX_REGISTER, v_max)
+    self._spi.write(self.v_max_register.set(VMaxRegister.bits.VMAX, speed))
 
   def set_target_steps(self, absolute_steps):
     """
@@ -176,8 +208,9 @@ class TMC4361:
     acceleration: (int) steps / sec / sec
     """
     # "22 digits and 2 decimal places:"
-    self._spi.writeRegister(TMC4361_A_MAX_REGISTER, acceleration << 2)
-    self._spi.writeRegister(TMC4361_D_MAX_REGISTER, acceleration << 2)
+    # self._spi.writeRegister(TMC4361_A_MAX_REGISTER, acceleration << 2)
+    # self._spi.writeRegister(TMC4361_D_MAX_REGISTER, acceleration << 2)
+    self.a_max_register.set(AMaxRegister.bits.AMAX, acceleration)
 
   def set_motor_steps_per_rev(self, steps_per_rev):
     """
@@ -196,7 +229,7 @@ class TMC4361:
 
   @property
   def acceleration(self):
-    datagram = self._spi.readRegister(TMC4361_A_ACTUAL_REGISTER)
+    datagram = self._spi.readRegister(AActualRegister.REGISTER)
     return datagram_to_int(datagram[1:])
 
   @property
@@ -224,7 +257,7 @@ class TMC4361:
 
   @property
   def current_steps(self):
-    datagram = self._spi.readRegister(TMC4361_X_ACTUAL_REGISTER)
+    datagram = self._spi.readRegister(XActualRegister.REGISTER)
     return datagram_to_int(datagram[1:])
 
   def compute_new_speed(self):
@@ -252,33 +285,160 @@ class TMC4361:
   # Non-API methods
   #
 
-  def set_ramp_scurve(self):
-    self._spi.write(self.ramp_mode_register
-      .set(RampModeRegister.bits.MOTION_PROFILE, 2) # S-shaped ramp
-      .set(RampModeRegister.bits.OPERATION_MODE, 1) # positioning mode
-    )
-    self._spi.writeRegister(TMC4361_BOW_1_REGISTER, 20)
-    self._spi.writeRegister(TMC4361_BOW_2_REGISTER, 80)
-    self._spi.writeRegister(TMC4361_BOW_3_REGISTER, 80)
-    self._spi.writeRegister(TMC4361_BOW_4_REGISTER, 20)
-    # TODO need to set A_MAX and D_MAX (set_acceleration() ?)
-    # Set ASTART = 0 (register 0x2A).
-    self._spi.writeRegister(TMC4361_A_START_REGISTER, 10 << 2)
-    # Set DFINAL = 0 (register 0x2B).
-    self._spi.writeRegister(TMC4361_D_FINAL_REGISTER, 10 << 2)
-    # TODO Set proper VMAX register 0x24. (set_target_speed() ?)
+  def set_ramp_scurve(self, v_max, a_max, d_max, bow1, bow2, bow3, bow4,
+    a_start=0, d_final=0,
+    motion_profile=2, operation_mode=1,
+    v_start=0, v_stop=0):
+    """
+    In order to make use of S-shaped ramps, do as follows:
+    Action:
+      - Set RAMPMODE(1:0)=b’10 (register 0x20).
+      - Set proper BOW1 … BOW4 registers 0x2C…0x30.
+      - Set proper AMAX register 0x28 and DMAX register 0x29.
+      - Set ASTART = 0 (register 0x2A).
+      - Set DFINAL = 0 (register 0x2B).
+      - Set proper VMAX register 0x24.
+      - (Optional) Set proper VSTART > 0 (register 0x25).
+      - (Optional) Set propert VSTOP > 0 (register 0x26).
+    Result:
+      The internal velocity VACTUAL is changed successively to VMAX with S-shaped ramps.
+      The acceleration/deceleration values are altered on the basis of the bow values.
+
+    In order to configure S-shaped ramps with starting and finishing values for
+    acceleration or deceleration, do as follows:
+    Action:
+      - Set S-Shaped ramp as explained above
+      - Set proper ASTART register 0x2A.
+      - Set proper DFINAL register 0x2B.
+    Result:
+      The internal velocity VACTUAL is changed successively to VMAX with S-Shaped ramps.
+
+    Definitions for S-shaped Ramps
+    - The acceleration/deceleration values are altered, based on the bow values.
+    - The start phase and the end phase of an S-shaped ramp is
+      accelerated/decelerated by ASTART and DFINAL.
+    - The ramp starts with ASTART and stops with DFINAL.
+    - DFINAL becomes valid when AACTUAL reaches the chosen DFINAL value.
+    - The parameter DFINAL is not considered during positioning mode.
+
+    Rising slope (absolute lower velocities to absolute higher velocities):
+      - BOW1 determines the value which increases the absolute acceleration value.
+      - BOW2 determines the value which decreases the absolute acceleration value.
+      - AMAX determines the maximum acceleration value.
+    Falling slope (absolute higher velocities to absolute lower velocities):
+      - BOW3 determines the value which increases the absolute deceleration value.
+      - BOW4 determines the value which decreases the absolute deceleration value.
+      - DMAX determines the maximum absolute deceleration value.
+    """
+    self._target_speed = v_max
+
+    self.ramp_mode_register\
+      .set(RampModeRegister.bits.MOTION_PROFILE, motion_profile)\
+      .set(RampModeRegister.bits.OPERATION_MODE, operation_mode)
+    self.bow1_register.set(Bow1Register.bits.BOW1, bow1)
+    self.bow2_register.set(Bow2Register.bits.BOW2, bow2)
+    self.bow3_register.set(Bow3Register.bits.BOW3, bow3)
+    self.bow4_register.set(Bow4Register.bits.BOW4, bow4)
+    self.v_max_register.set(VMaxRegister.bits.VMAX, v_max)
+    self.a_max_register.set(AMaxRegister.bits.AMAX, a_max)
+    self.d_max_register.set(DMaxRegister.bits.DMAX, d_max)
+    self.v_start_register.set(VStartRegister.bits.VSTART, v_start)
+    self.v_stop_register.set(VStopRegister.bits.VSTOP, v_stop)
+    self.a_start_register.set(AStartRegister.bits.ASTART, a_start)
+    self.d_final_register.set(DFinalRegister.bits.DFINAL, d_final)
+    self.flush_registers()
 
   def set_ramp_none(self):
+    """
+    Motion profile No Ramp follows VMAX only (rectangular velocity shape).
+
+    In Velocity mode
+    Action:
+      - Set RAMPMODE(1:0) =b’00 (register 0x20).
+      - Set proper VMAX register 0x24.
+    Result:
+      The internal velocity VACTUAL is immediately set to VMAX.
+
+    In Positioning mode
+    Determines that the ramp holds VMAX until XTARGET is reached.
+    The motion direction depends on XTARGET.
+    Action:
+      - Set RAMPMODE(2:0) =b’100.
+      - Set proper VMAX register 0x24.
+      - Set proper XTARGET register 0x37.
+    Result:
+      VACTUAL is set instantly to 0 in case the target position is reached.
+
+    TODO Do NOT exceed VMAX ≤ fCLK / 4 pulses for positioning mode.
+    """
     self._spi.write(self.ramp_mode_register
       .set(RampModeRegister.bits.MOTION_PROFILE, 0) # no ramp
       .set(RampModeRegister.bits.OPERATION_MODE, 1) # positioning mode
     )
 
-  def set_ramp_trapezoid(self):
-    self._spi.write(self.ramp_mode_register
-      .set(RampModeRegister.bits.MOTION_PROFILE, 1) # trapezoidal
-      .set(RampModeRegister.bits.OPERATION_MODE, 1) # positioning mode
-    )
+  def set_ramp_trapezoid(self, v_max, a_max, d_max,
+    motion_profile=1, operation_mode=1, v_break=0,
+    v_start=0, v_stop=0):
+    """
+    Consideration of acceleration and deceleration values
+    without adaptation of these acceleration values.
+
+    Action:
+      - Set RAMPMODE(1:0) =b’01 (register 0x20).
+      - Set VBREAK =0 (register 0x27).
+      - Set proper AMAX register 0x28 and DMAX register 0x29.
+      - Set proper VMAX register 0x24.
+      - (Optional) Set proper VSTART > 0 (register 0x25).
+      - (Optional) Set propert VSTOP > 0 (register 0x26).
+    Result:
+      The internal velocity VACTUAL is changed successively to VMAX with a linear ramp.
+      Only AMAX and DMAX define the acceleration/deceleration slopes.
+
+    AMAX determines the rising slope from absolute low to absolute high velocities,
+    whereas DMAX determines the falling slope from absolute high to absolute low
+    velocities.
+    Acceleration slope and deceleration slopes have only one acceleration and
+    deceleration value each.
+    """
+    self.ramp_mode_register\
+      .set(RampModeRegister.bits.MOTION_PROFILE, motion_profile)\
+      .set(RampModeRegister.bits.OPERATION_MODE, operation_mode)
+    self.v_max_register.set(VMaxRegister.bits.VMAX, v_max)
+    self.v_break_register.set(VBreakRegister.bits.VBREAK, 0)
+    self.a_max_register.set(AMaxRegister.bits.AMAX, a_max)
+    self.d_max_register.set(DMaxRegister.bits.DMAX, d_max)
+    self.v_start_register.set(VStartRegister.bits.VSTART, v_start)
+    self.v_stop_register.set(VStopRegister.bits.VSTOP, v_stop)
+    self.flush_registers()
+
+  def set_ramp_sixpoint(self, v_max, v_break, a_start, a_max, d_max, d_final,
+    motion_profile=1, operation_mode=1,
+    v_start=0, v_stop=0):
+    """
+    Consideration of acceleration and deceleration values
+    without adaptation of these acceleration values
+
+    Action:
+      - Set RAMPMODE(1:0)=b’01 (register 0x20).
+      - Set proper VBREAK register 0x27.
+      - Set proper AMAX register 0x28 and DMAX register 0x29.
+      - Set proper ASTART register 0x2A and DFINAL register 0x2B.
+      - Set proper VMAX register 0x24.
+      - (Optional) Set proper VSTART > 0 (register 0x25).
+      - (Optional) Set propert VSTOP > 0 (register 0x26).
+    Result:
+      The internal velocity VACTUAL is changed successively to VMAX with a linear ramp. In
+      addition to AMAX and DMAX, ASTART and DFINAL define the acceleration or
+      deceleration slopes (see Figure above).
+
+    AMAX and ASTART determines the rising slope from absolute low to absolute
+    high velocities.
+    DMAX and DFINAL determines the falling slope from absolute high to absolute
+    low velocities.
+    The acceleration/deceleration factor alters at VBREAK. ASTART and DFINAL are
+    valid below VBREAK, whereas AMAX and DMAX are valid beyond VBREAK.
+    """
+    pass
 
   def update_move(self):
     # FIXME What is this code supposed to be doing?
@@ -304,7 +464,7 @@ class TMC4361:
 
   @property
   def current_speed(self):
-    datagram = self._spi.readRegister(TMC4361_V_ACTUAL_REGISTER)
+    datagram = self._spi.readRegister(VActualRegister.REGISTER)
     value = datagram_to_int(datagram[2:])
     return value
 
@@ -316,7 +476,7 @@ class TMC4361:
 
   @property
   def target_speed(self):
-    datagram = self._spi.readRegister(TMC4361_V_MAX_REGISTER)
+    datagram = self._spi.readRegister(VMaxRegister.REGISTER)
     value = datagram_to_int(datagram[1:])
     # 24 bits integer part, 8 bits decimal places
     value = value >> 8

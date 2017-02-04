@@ -1,6 +1,6 @@
 import unittest
-from RaspberryPiStepperDriver.activators.tmc4361.registers import mask, \
-  StatusEventRegister, SpiStatusSelectionRegister, ExternalClockFrequencyRegister
+from RaspberryPiStepperDriver.activators.tmc4361.registers import mask, Representation, \
+  StatusEventRegister, SpiStatusSelectionRegister, ExternalClockFrequencyRegister, VMaxRegister
 
 class TestRegisters(unittest.TestCase):
   def test_1(self):
@@ -39,6 +39,21 @@ class TestRegisters(unittest.TestCase):
 
   def test_mask(self):
     self.assertEqual(mask(5, 6), 0b1100000)
+
+  def test_representation_set(self):
+    num = 44.443355
+    rep = Representation(24, 8)
+    register = VMaxRegister().set(VMaxRegister.bits.VMAX, num, representation=rep)
+    self.assertEqual(register.data, 11377)
+
+  def test_representation_roundtrip(self):
+    num = 44.443355
+    rep = Representation(24, 8)
+    register = VMaxRegister().set(VMaxRegister.bits.VMAX, num, representation=rep)
+    self.assertEqual(register.data, 11377)
+    value = register.get(VMaxRegister.bits.VMAX, representation=rep)
+    # Note: fixed to floating point conversion is inexact
+    self.assertEqual(value, 44.44140625)
 
 if __name__ == '__main__':
   unittest.main()

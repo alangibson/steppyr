@@ -2,11 +2,109 @@
 registers for TMC4361
 """
 import functools
-from RaspberryPiStepperDriver import set_bit, unset_bit, lsb, mask, _BV
+from RaspberryPiStepperDriver import set_bit, unset_bit, lsb, mask, _BV, get_bits
 from RaspberryPiStepperDriver.activators.tmc4361.io import Datagram
 
 WRITE_MASK = 0x80 # register | WRITE_MASK
 READ_MASK = 0x7F # register & READ_MASK
+
+# Defines ported to Python functions
+# simple FP math see https://ucexperiment.wordpress.com/2012/10/28/fixed-point-math-on-the-arduino-platform/
+FIXED_23_8_MAKE = lambda a: a * (1 << 8)
+FIXED_22_2_MAKE = lambda a: a * (1 << 2)
+
+# Convert floating point to/from fixed point
+number_to_fixed = lambda float_value, fractional_bits: int(float_value * (1 << fractional_bits))
+fixed_to_number = lambda fixed_value, fractional_bits: fixed_value * ( 2**-fractional_bits )
+
+def register_to_number(number, whole_bits, fractional_bits, signed):
+  # TODO handle negative
+  # msb_mask = _BV(whole_bits + fractional_bits - 1)
+  # is_negative = number & msb_mask
+  return fixed_to_number(number, fractional_bits)
+
+class AttributeDict(dict):
+  __getattr__ = dict.__getitem__
+  __setattr__ = dict.__setitem__
+
+class Representation:
+  """
+  Value Representation
+
+  Fixed Point Math on the Arduino Platform
+    https://ucexperiment.wordpress.com/2012/10/28/fixed-point-math-on-the-arduino-platform/
+  """
+  def __init__(self, digit_bits, decimal_bits=0, signed=False):
+    self._digit_bits = digit_bits
+    self._decimal_bits = decimal_bits
+    self._signed = signed
+
+  def to_register_value(self, number):
+    # TODO handle signed
+    return number_to_fixed(number, self._decimal_bits)
+
+  def from_register_value(self, number):
+    return register_to_number(number, self._digit_bits, self._decimal_bits, self._signed)
+
+class Register(Datagram):
+
+  def __init__(self, data=0):
+    self._header = self.REGISTER
+    self._data = data
+
+  def set(self, bitmask, value=None, representation=None):
+    """
+    value: (int or float) If float, a Representation is needed to encode to
+           valid register value.
+    bitmask can be
+    1. integer bitmask (or really any integer)
+    # Disabled: 2. dict like: {bitmask: mask(0, 30), representation: Representation(23, 8, False)}
+    """
+    # Unpack bitmask if it is a dict
+    bitmask, unpacked_representation = unpack_bitmask_dict(bitmask)
+    if not representation:
+      representation = unpacked_representation
+    # Apply Representation if requested
+    if representation:
+      # Encode value to register value using Representation
+      value = representation.to_register_value(value)
+    if value == None:
+      # Just apply the bitmask itself
+      self._data = set_bit(self._data, bitmask)
+    else:
+      # Apply value at bitmask bits
+      self._data = set_bit(unset_bit(self._data, bitmask), (value << lsb(bitmask)))
+    return self
+
+  def unset(self, bitmask):
+    self._data = unset_bit(self._data, bitmask)
+    return self
+
+  def get(self, bitmask, representation=None):
+    # Unpack bitmask if it is a dict
+    bitmask, unpacked_representation = unpack_bitmask_dict(bitmask)
+    if not representation:
+      representation = unpacked_representation
+    # Apply mask to get value from data
+    value = get_bits(self._data, bitmask)
+    # Apply Representation if requested
+    if representation:
+      # Encode value to register value using Representation
+      value = representation.from_register_value(value)
+    return value
+
+  def get_values(self):
+    events = []
+    for name, bitmask in self.bits.items():
+      if self._data & bitmask:
+        events.append((name, bitmask))
+    return events
+
+def unpack_bitmask_dict(bitmask_dict):
+  if type(bitmask_dict) == dict:
+    return (bitmask_dict['bitmask'], bitmask_dict['format'])
+  else:
+    return (bitmask_dict, None)
 
 # Reference Switch Configuration Register
 TMC4361_REFERENCE_CONFIG_REGISTER = 0x01
@@ -65,58 +163,203 @@ TMC4361_GEAR_RATIO_REGISTER = 0x12
 # RW. Bits 31:0. START_DELAY.
 #   Delay time [# clock cycles] between start trigger and internal start signal release.
 TMC4361_START_DELAY_REGISTER = 0x13
-# RW. Current internal microstep position; signed; 32 bits
-# RW. Bit 0:31. Actual internal motor position [pulses]: –2^31 ≤ XACTUAL ≤ 2^31 – 1
-TMC4361_X_ACTUAL_REGISTER = 0x21
-# R. Current step velocity; 24 bits; signed; no decimals.
-# Bit 31:0: Actual ramp generator velocity [pulses per second]: 1 pps ≤ |VACTUAL| ≤ CLK_FREQ · 1/2 pulses (fCLK = 16 MHz -> 8 Mpps)
-TMC4361_V_ACTUAL_REGISTER = 0x22
-# R. Current step acceleration; 24 bits; signed; no decimals.
-TMC4361_A_ACTUAL_REGISTER = 0x23
-# RW. Maximum permitted or target velocity; signed; 32 bits= 24+8 (24 bits integer part, 8 bits decimal places).
-TMC4361_V_MAX_REGISTER = 0x24
-# RW. Velocity at ramp start; unsigned; 31 bits=23+8.
-TMC4361_V_START_REGISTER = 0x25
-# RW. Velocity at ramp end; unsigned; 31 bits=23+8.
-TMC4361_V_STOP_REGISTER = 0x26
-# RW. At this velocity value, the aceleration/deceleration will change during trapezoidal ramps; unsigned; 31 bits=23+8.
-TMC4361_V_BREAK_REGISTER = 0x27
-# RW. Maximum permitted or target acceleration; unsigned; 24 bits=22+2 (22 bits integer part, 2 bits decimal places).
-TMC4361_A_MAX_REGISTER = 0x28
-# RW. Maximum permitted or target deceleration; unsigned; 24 bits=22+2.
-TMC4361_D_MAX_REGISTER = 0x29
+
+class XActualRegister(Register):
+  REGISTER = 0x21
+  bits = AttributeDict({
+    # RW. 31:0 XACTUAL (Default: 0x00000000)
+    #   Actual internal motor position [pulses]: –2^31 ≤ XACTUAL ≤ 2^31 – 1
+    #   signed; 32 bits
+    'XACTUAL': {'bitmask': mask(0, 31), 'format': Representation(32, 0, True)}
+  })
+class VActualRegister(Register):
+  REGISTER = 0x22
+  bits = AttributeDict({
+    # R. Current step velocity; 24 bits; signed; no decimals.
+    # Bit 31:0: Actual ramp generator velocity [pulses per second]:
+    #   1 pps ≤ |VACTUAL| ≤ CLK_FREQ · 1/2 pulses (fCLK = 16 MHz -> 8 Mpps)
+    'VACTUAL': {'bitmask': mask(0, 31), 'format': Representation(24, 0, True)}
+  })
+class AActualRegister(Register):
+  REGISTER = 0x23
+  bits = AttributeDict({
+    # R. 31:0 AACTUAL (Default: 0x00000000)
+    # Current step acceleration; 24 bits; signed; no decimals.
+    'AACTUAL': {'bitmask': mask(0, 31), 'format': Representation(24, 0, True)}
+  })
+class VMaxRegister(Register):
+  REGISTER = 0x24
+  bits = AttributeDict({
+    # RW 31:0 VMAX (Default: 0x00000000)
+    # Maximum ramp generator velocity in positioning mode or
+    # Target ramp generator velocity in velocity mode and no ramp motion profile.
+    # Value representation: signed; 32 bits= 24+8 (24 bits integer part, 8 bits decimal places).
+    'VMAX': {'bitmask': mask(0, 31), 'format': Representation(24, 8, True)}
+  })
+class VStartRegister(Register):
+  REGISTER = 0x25
+  bits = AttributeDict({
+    # RW 30:0 VSTART (Default: 0x00000000)
+    # Absolute start velocity in positioning mode and velocity mode
+    # In case VSTART is used: no first bow phase B1 for S-shaped ramps
+    # VSTART in positioning mode:
+    #   In case VACTUAL = 0 and XTARGET ≠ XACTUAL:
+    #   no acceleration phase for VACTUAL = 0  VSTART.
+    # VSTART in velocity mode:
+    #   In case VACTUAL = 0 and VACTUAL ≠ VMAX:
+    #   no acceleration phase for VACTUAL = 0  VSTART.
+    # Value representation: 23 digits and 8 decimal places. unsigned; 31 bits=23+8.
+    'VSTART': {'bitmask': mask(0, 30), 'format': Representation(23, 8, False)}
+  })
+class VStopRegister(Register):
+  REGISTER = 0x26
+  bits = AttributeDict({
+    # RW 30:0 VSTOP (Default:0x00000000)
+    # Absolute stop velocity in positioning mode and velocity mode.
+    # In case VSTOP is used: no last bow phase B4 for S-shaped ramps.
+    # In case VSTOP is very small and positioning mode is used, it is possible that the
+    # ramp is finished with a constant VACTUAL = VSTOP until XTARGET is reached.
+    # VSTOP in positioning mode:
+    #   In case VACTUAL≤VSTOP and XTARGET=XACTUAL: VACTUAL is immediately set to 0.
+    # VSTOP in velocity mode:
+    #   In case VACTUAL ≤ VSTOP and VMAX = 0: VACTUAL is immediately set to 0.
+    # Value representation: 23 digits and 8 decimal places. unsigned; 31 bits=23+8.
+    'VSTOP': {'bitmask': mask(0, 30), 'format': Representation(23, 8, False)}
+  })
+class VBreakRegister(Register):
+  REGISTER = 0x27
+  bits = AttributeDict({
+    # RW 30:0 VBREAK (Default:0x00000000)
+    # Absolute break velocity in positioning mode and in velocity mode,
+    # This only applies for trapezoidal ramp motion profiles.
+    # In case VBREAK = 0: pure linear ramps are generated with AMAX / DMAX only.
+    # In case |VACTUAL| < VBREAK: |AACTUAL| = ASTART or DFINAL
+    # In case |VACTUAL| ≥ VBREAK: |AACTUAL| = AMAX or DMAX
+    # Always set VBREAK > VSTOP! If VBREAK != 0.
+    # Value representation: 23 digits and 8 decimal places. unsigned; 31 bits=23+8.
+    'VBREAK': {'bitmask': mask(0, 30), 'format': Representation(23, 8, False)}
+  })
+class AMaxRegister(Register):
+  REGISTER = 0x28
+  bits = AttributeDict({
+    # RW 23:0 AMAX (Default: 0x000000)
+    # S-shaped ramp motion profile: Maximum acceleration value.
+    # Trapezoidal ramp motion profile:
+    #   Acceleration value in case |VACTUAL| ≥ VBREAK or in case VBREAK = 0.
+    # Value representation:
+    #   Frequency mode: [pulses per sec2]
+    #     22 digits and 2 decimal places: 250 mpps2 ≤ AMAX ≤ 4 Mpps2
+    #     unsigned; 24 bits=22+2 (22 bits integer part, 2 bits decimal places).
+    #   Direct mode: [∆v per clk cycle]
+    #     a[∆v per clk_cycle]= AMAX / 237
+    #     AMAX [pps2] = AMAX / 237 • fCLK2
+    'AMAX': {'bitmask': mask(0, 23), 'format': Representation(22, 2, False)}
+  })
+class DMaxRegister(Register):
+  REGISTER = 0x29
+  bits = AttributeDict({
+    # RW 23:0 DMAX (Default: 0x000000)
+    # S-shaped ramp motion profile: Maximum deceleration value.
+    # Trapezoidal ramp motion profile:
+    #   Deceleration value if |VACTUAL| ≥ VBREAK or if VBREAK = 0.
+    # Value representation:
+    #   Frequency mode: [pulses per sec2]
+    #     22 digits and 2 decimal places: 250 mpps2 ≤ DMAX ≤ 4 Mpps2
+    #     unsigned; 24 bits=22+2.
+    #   Direct mode: [∆v per clk cycle]
+    #     d[∆v per clk_cycle]= DMAX / 237
+    #     DMAX [pps2] = DMAX / 237 • fCLK2
+    'DMAX': mask(0, 23)
+  })
 # RW. First bow value of a complete velocity ramp; unsigned; 24 bits=24+0 (24 bits integer part, no decimal places).
-TMC4361_BOW_1_REGISTER = 0x2d
-# RW. Second bow value of a complete velocity ramp; unsigned; 24bits=24+0.
-TMC4361_BOW_2_REGISTER = 0x2e
-# RW. Third bow value of a complete velocity ramp; unsigned; 24 bits=24+0.
-TMC4361_BOW_3_REGISTER = 0x2f
-# RW. Fourth bow value of a complete velocity ramp; unsigned; 24 bits=24+0.
-TMC4361_BOW_4_REGISTER = 0x30
-# 23:0 ASTART (Default: 0x000000)
-#   S-shaped ramp motion profile: start acceleration value.
-#   Trapezoidal ramp motion profile:
-#     Acceleration value in case |VACTUAL| < VBREAK.
-#     Acceleration value after switching from external to internal step control.
-#   Value representation:
-#     Frequency mode: [pulses per sec2] 22 digits and 2 decimal places: 250 mpps2 ≤ ASTART ≤ 4 Mpps2
-#     Direct mode: [∆v per clk cycle]
-#       a[∆v per clk_cycle]= ASTART / 237
-#       ASTART [pps2] = ASTART / 237 • fCLK2
-#       Consider maximum values, represented in section 6.7.5, page 50
-# 31 Sign of AACTUAL after switching from external to internal step control.
-TMC4361_A_START_REGISTER = 0x2A
-# 23:0 DFINAL (Default: 0x000000)
-#   S-shaped ramp motion profile: Stop deceleration value, which is not used during positioning mode.
-#   Trapezoidal ramp motion profile:
-#     Deceleration value in case |VACTUAL| < VBREAK.
-#   Value representation:
-#     Frequency mode: [pulses per sec2]22 digits and 2 decimal places: 250 mpps2 ≤ DFINAL ≤ 4 Mpps2
-#   Direct mode: [∆v per clk cycle]
-#     d[∆v per clk_cycle]= DFINAL / 237
-#     DFINAL [pps2] = DFINAL / 237 • fCLK2
-#     Consider maximum values, represented in section 6.7.5, page 50
-TMC4361_D_FINAL_REGISTER = 0x2B
+class Bow1Register(Register):
+  REGISTER = 0x2d
+  bits = AttributeDict({
+    # RW 23:0 BOW1 (Default: 0x000000)
+    # Bow value 1 (first bow B1 of the acceleration ramp).
+    # Value representation:
+    #   Frequency mode: [pulses per sec3]
+    #     24 digits and 0 decimal places: 1 pps3 ≤ BOW1 ≤ 16 Mpps3
+    #   Direct mode: [∆a per clk cycle]
+    #     bow[av per clk_cycle]= BOW1 / 253
+    #     BOW1 [pps3] = BOW1 / 253 • fCLK3
+    'BOW1': mask(0, 23)
+  })
+class Bow2Register(Register):
+  REGISTER = 0x2e
+  bits = AttributeDict({
+    # RW 23:0 BOW2 (Default: 0x000000)
+    # Bow value 2 (second bow B2 of the acceleration ramp).
+    # Value representation:
+    #   Frequency mode: [pulses per sec3]
+    #     24 digits and 0 decimal places: 1 pps3 ≤ BOW2 ≤ 16 Mpps3
+    #     unsigned; 24bits=24+0.
+    #   Direct mode: [∆a per clk cycle]
+    #     bow[av per clk_cycle]= BOW2 / 253
+    #     BOW2 [pps3] = BOW2 / 253 • fCLK3
+    'BOW2': mask(0, 23)
+  })
+class Bow3Register(Register):
+  REGISTER = 0x2f
+  bits = AttributeDict({
+    # RW 23:0 BOW3 (Default: 0x000000)
+    # Bow value 3 (first bow B3 of the deceleration ramp).
+    # Value representation:
+    #   Frequency mode: [pulses per sec3]
+    #     24 digits and 0 decimal places: 1 pps3 ≤ BOW3 ≤ 16 Mpps3
+    #       unsigned; 24 bits=24+0.
+    #   Direct mode: [∆a per clk cycle]
+    #     bow[av per clk_cycle]= BOW3 / 253
+    #     BOW3 [pps3] = BOW3 / 253 • fCLK3
+    'BOW3': mask(0, 23)
+  })
+class Bow4Register(Register):
+  REGISTER = 0x30
+  bits = AttributeDict({
+    # RW 23:0 BOW 4 (Default: 0x000000)
+    # Bow value 4 (second bow B4 of the deceleration ramp).
+    # Value representation:
+    #   Frequency mode: [pulses per sec3]
+    #     24 digits and 0 decimal places: 1 pps3 ≤ BOW4 ≤ 16 Mpps3
+    #     unsigned; 24 bits=24+0.
+    #   Direct mode: [∆a per clk cycle]
+    #     bow[av per clk_cycle]= BOW4 / 253
+    #     BOW4 [pps3] = BOW4 / 253 • fCLK3
+    'BOW4': mask(0, 23)
+  })
+class AStartRegister(Register):
+  REGISTER = 0x2A
+  bits = AttributeDict({
+    # RW 23:0 ASTART (Default: 0x000000)
+    #   S-shaped ramp motion profile: start acceleration value.
+    #   Trapezoidal ramp motion profile:
+    #     Acceleration value in case |VACTUAL| < VBREAK.
+    #     Acceleration value after switching from external to internal step control.
+    #   Value representation:
+    #     Frequency mode: [pulses per sec2] 22 digits and 2 decimal places: 250 mpps2 ≤ ASTART ≤ 4 Mpps2
+    #     Direct mode: [∆v per clk cycle]
+    #       a[∆v per clk_cycle]= ASTART / 237
+    #       ASTART [pps2] = ASTART / 237 • fCLK2
+    #       Consider maximum values, represented in section 6.7.5, page 50
+    'ASTART': mask(0, 23),
+    # RW 31 Sign of AACTUAL after switching from external to internal step control.
+    'AACTUAL_SIGN': _BV(31)
+  })
+class DFinalRegister(Register):
+  REGISTER = 0x2B
+  bits = AttributeDict({
+    # RW 23:0 DFINAL (Default: 0x000000)
+    #   S-shaped ramp motion profile: Stop deceleration value, which is not used during positioning mode.
+    #   Trapezoidal ramp motion profile:
+    #     Deceleration value in case |VACTUAL| < VBREAK.
+    #   Value representation:
+    #     Frequency mode: [pulses per sec2]22 digits and 2 decimal places: 250 mpps2 ≤ DFINAL ≤ 4 Mpps2
+    #   Direct mode: [∆v per clk cycle]
+    #     d[∆v per clk_cycle]= DFINAL / 237
+    #     DFINAL [pps2] = DFINAL / 237 • fCLK2
+    #     Consider maximum values, represented in section 6.7.5, page 50
+    'DFINAL': mask(0, 23)
+  })
 
 # Target and Compare Registers
 TMC4361_POSITION_COMPARE_REGISTER = 0x32
@@ -152,36 +395,6 @@ TMC4361_COVER_DRV_HIGH_REGISTER = 0x6F
 # how to mask REFERENCE_CONFIG_REGISTER if you want to configure just one end
 TMC4361_LEFT_ENDSTOP_REGISTER_PATTERN = (_BV(0) | _BV(2) | _BV(6) | _BV(10) | _BV(11) | _BV(14))
 TMC4361_RIGHT_ENDSTOP_REGISTER_PATTERN = (_BV(1) | _BV(3) | _BV(7) | _BV(12) | _BV(13) | _BV(15))
-
-class AttributeDict(dict):
-  __getattr__ = dict.__getitem__
-  __setattr__ = dict.__setitem__
-
-class Register(Datagram):
-
-  def __init__(self, register_value=0):
-    self._header = self.REGISTER
-    self._data = register_value
-
-  def set(self, bitmask, value=None):
-    if value == None:
-      # Just apply the bitmask itself
-      self._data = set_bit(self._data, bitmask)
-    else:
-      # Apply value at bitmask bits
-      self._data = set_bit(unset_bit(self._data, bitmask), (value << lsb(bitmask)))
-    return self
-
-  def unset(self, bitmask):
-    self._data = unset_bit(self._data, bitmask)
-    return self
-
-  def get_values(self):
-    events = []
-    for name, bitmask in self.bits.items():
-      if self._data & bitmask:
-        events.append((name, bitmask))
-    return events
 
 class StatusEventRegister(Register):
   """
