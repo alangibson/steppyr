@@ -41,8 +41,11 @@ async def report(driver):
     print('    current_speed', driver.profile.current_speed)
     print('    target_steps', driver.profile.target_steps)
     print('    current_steps', driver.profile.current_steps)
+    print('    distance_to_go', driver.profile.distance_to_go)
     print('    target_speed', driver.profile.target_speed)
     print('    acceleration', driver.profile.acceleration)
+    print('    target_acceleration', driver.profile.target_acceleration)
+    print('    target_deceleration', driver.profile.target_deceleration)
     await asyncio.sleep(1)
   print('Reporting done')
 

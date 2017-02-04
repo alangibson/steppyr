@@ -97,10 +97,6 @@ class TMC4361:
       .set(GeneralConfigurationRegister.bits.POL_DIR_OUT)
     )
 
-    # Set positioning and ramp shape
-    # Section 6.3.4 No Ramp Motion Profile
-    # self.set_ramp_scurve()
-
     # TODO ? self._spi.writeRegister(registers.TMC4361_SH_RAMP_MODE_REGISTER, RAMP_MODE_POSITIONING_MODE | RAMP_MODE_NO_RAMP)
 
     self._spi.write(self.external_clock_frequency_register)
@@ -116,6 +112,8 @@ class TMC4361:
     # filter ref
     # filter |= (2<<8) | 0x4000
     # self._spi.writeRegister(registers.TMC4361_INPUT_FILTER_REGISTER, filter)
+
+    self.set_ramp_trapezoid(v_max=0, a_max=0, d_max=0)
 
     self.enable_tmc26x()
 
@@ -224,7 +222,7 @@ class TMC4361:
     """
     Implements Profile.set_current_position(position) method.
     """
-    # TODO Implement
+    # TODO return self._spi.read(XActualRegister.bits.XACTUAL)
     pass
 
   @property
@@ -237,8 +235,7 @@ class TMC4361:
     """
     Implements Profile.distance_to_go method.
     """
-    # TODO Implement
-    pass
+    return self.target_steps - self.current_steps
 
   @property
   def is_moving(self):
@@ -257,8 +254,9 @@ class TMC4361:
 
   @property
   def current_steps(self):
-    datagram = self._spi.readRegister(XActualRegister.REGISTER)
-    return datagram_to_int(datagram[1:])
+    # datagram = self._spi.readRegister(XActualRegister.REGISTER)
+    # return datagram_to_int(datagram[1:])
+    return self._spi.read(XActualRegister()).get(XActualRegister.bits.XACTUAL)
 
   def compute_new_speed(self):
     pass
@@ -284,6 +282,14 @@ class TMC4361:
   #
   # Non-API methods
   #
+
+  @property
+  def target_acceleration(self):
+    return self._spi.read(AMaxRegister()).get(AMaxRegister.bits.AMAX)
+
+  @property
+  def target_deceleration(self):
+    return self._spi.read(DMaxRegister()).get(DMaxRegister.bits.DMAX)
 
   def set_ramp_scurve(self, v_max, a_max, d_max, bow1, bow2, bow3, bow4,
     a_start=0, d_final=0,
