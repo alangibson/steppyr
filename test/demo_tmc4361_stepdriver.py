@@ -27,7 +27,7 @@ driver.profile.set_motor_steps_per_rev(200)
 driver.profile.tmc26x.set_current(1000)
 
 driver.set_target_speed(100)
-driver.set_acceleration(1000)
+driver.set_acceleration(10)
 # driver.profile.et
 
 driver.move_to(10000)

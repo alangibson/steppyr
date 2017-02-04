@@ -13,15 +13,23 @@ READ_MASK = 0x7F # register & READ_MASK
 FIXED_23_8_MAKE = lambda a: a * (1 << 8)
 FIXED_22_2_MAKE = lambda a: a * (1 << 2)
 
+def decode_twos_complement(input_value, num_bits):
+	"""
+  Calculates a two's complement integer from the given input value's bits
+  https://en.wikipedia.org/wiki/Two's_complement
+  """
+	mask = 2**(num_bits - 1)
+	return -(input_value & mask) + (input_value & ~mask)
+
 # Convert floating point to/from fixed point
 number_to_fixed = lambda float_value, fractional_bits: int(float_value * (1 << fractional_bits))
-fixed_to_number = lambda fixed_value, fractional_bits: fixed_value * ( 2**-fractional_bits )
+fixed_to_number = lambda fixed_value, fractional_bits: fixed_value * (2**-fractional_bits)
 
-def register_to_number(number, whole_bits, fractional_bits, signed):
-  # TODO handle negative
-  # msb_mask = _BV(whole_bits + fractional_bits - 1)
-  # is_negative = number & msb_mask
-  return fixed_to_number(number, fractional_bits)
+def unpack_bitmask_dict(bitmask_dict):
+  if type(bitmask_dict) == dict:
+    return (bitmask_dict['bitmask'], bitmask_dict['format'])
+  else:
+    return (bitmask_dict, None)
 
 class AttributeDict(dict):
   __getattr__ = dict.__getitem__
@@ -44,7 +52,7 @@ class Representation:
     return number_to_fixed(number, self._decimal_bits)
 
   def from_register_value(self, number):
-    return register_to_number(number, self._digit_bits, self._decimal_bits, self._signed)
+    return fixed_to_number(number, self._decimal_bits)
 
 class Register(Datagram):
 
@@ -99,12 +107,6 @@ class Register(Datagram):
       if self._data & bitmask:
         events.append((name, bitmask))
     return events
-
-def unpack_bitmask_dict(bitmask_dict):
-  if type(bitmask_dict) == dict:
-    return (bitmask_dict['bitmask'], bitmask_dict['format'])
-  else:
-    return (bitmask_dict, None)
 
 # Reference Switch Configuration Register
 TMC4361_REFERENCE_CONFIG_REGISTER = 0x01
@@ -163,6 +165,39 @@ TMC4361_GEAR_RATIO_REGISTER = 0x12
 # RW. Bits 31:0. START_DELAY.
 #   Delay time [# clock cycles] between start trigger and internal start signal release.
 TMC4361_START_DELAY_REGISTER = 0x13
+# Target and Compare Registers
+TMC4361_POSITION_COMPARE_REGISTER = 0x32
+TMC4361_VIRTUAL_STOP_LEFT_REGISTER = 0x33
+TMC4361_VIRTUAL_STOP_RIGHT_REGISTER = 0x34
+TMC4361_X_LATCH_REGISTER = 0x36
+# RW. Target position; signed; 32 bits.
+TMC4361_X_TARGET_REGISTER = 0x37
+TMC4361_X_TARGET_PIPE_0_REGSISTER = 0x38
+# Shadow Register
+#   Some applications require a complete new ramp parameter set for a specific ramp
+#   situation / point in time. TMC4361A provides up to 14 shadow registers, which
+#   are loaded into the corresponding ramp parameter registers after an internal
+#   start signal is generated.
+# RW. Bit 31:0. Val S. SH_REG0 (Default: 0x00000000) : 1st shadow register.
+TMC4361_SH_V_MAX_REGISTER = 0x40
+# RW. Bit 31:0. Val U. SH_REG1 (Default: 0x00000000) : 2nd shadow register
+TMC4361_SH_A_MAX_REGISTER = 0x41
+TMC4361_SH_D_MAX_REGISTER = 0x42
+TMC4361_SH_VBREAK_REGISTER = 0x45
+TMC4361_SH_V_START_REGISTER = 0x46
+TMC4361_SH_V_STOP_REGISTER = 0x47
+TMC4361_SH_BOW_1_REGISTER = 0x48
+TMC4361_SH_BOW_2_REGISTER = 0x49
+TMC4361_SH_BOW_3_REGISTER = 0x4A
+TMC4361_SH_BOW_4_REGISTER = 0x4B
+TMC4361_SH_RAMP_MODE_REGISTER = 0x4C
+TMC4361_ENCODER_POSITION_REGISTER = 0x50
+TMC4361_ENCODER_INPUT_RESOLUTION_REGISTER = 0x54
+TMC4361_COVER_HIGH_REGISTER = 0x6D
+TMC4361_COVER_DRV_HIGH_REGISTER = 0x6F
+# how to mask REFERENCE_CONFIG_REGISTER if you want to configure just one end
+TMC4361_LEFT_ENDSTOP_REGISTER_PATTERN = (_BV(0) | _BV(2) | _BV(6) | _BV(10) | _BV(11) | _BV(14))
+TMC4361_RIGHT_ENDSTOP_REGISTER_PATTERN = (_BV(1) | _BV(3) | _BV(7) | _BV(12) | _BV(13) | _BV(15))
 
 class XActualRegister(Register):
   REGISTER = 0x21
@@ -363,42 +398,6 @@ class DFinalRegister(Register):
     #       DFINAL [pps2] = DFINAL / 237 • fCLK2
     'DFINAL': {'bitmask': mask(0, 23), 'format': Representation(22, 2, False)}
   })
-
-# Target and Compare Registers
-TMC4361_POSITION_COMPARE_REGISTER = 0x32
-TMC4361_VIRTUAL_STOP_LEFT_REGISTER = 0x33
-TMC4361_VIRTUAL_STOP_RIGHT_REGISTER = 0x34
-TMC4361_X_LATCH_REGISTER = 0x36
-# RW. Target position; signed; 32 bits.
-TMC4361_X_TARGET_REGISTER = 0x37
-TMC4361_X_TARGET_PIPE_0_REGSISTER = 0x38
-# Shadow Register
-#   Some applications require a complete new ramp parameter set for a specific ramp
-#   situation / point in time. TMC4361A provides up to 14 shadow registers, which
-#   are loaded into the corresponding ramp parameter registers after an internal
-#   start signal is generated.
-# RW. Bit 31:0. Val S. SH_REG0 (Default: 0x00000000) : 1st shadow register.
-TMC4361_SH_V_MAX_REGISTER = 0x40
-# RW. Bit 31:0. Val U. SH_REG1 (Default: 0x00000000) : 2nd shadow register
-TMC4361_SH_A_MAX_REGISTER = 0x41
-TMC4361_SH_D_MAX_REGISTER = 0x42
-TMC4361_SH_VBREAK_REGISTER = 0x45
-TMC4361_SH_V_START_REGISTER = 0x46
-TMC4361_SH_V_STOP_REGISTER = 0x47
-TMC4361_SH_BOW_1_REGISTER = 0x48
-TMC4361_SH_BOW_2_REGISTER = 0x49
-TMC4361_SH_BOW_3_REGISTER = 0x4A
-TMC4361_SH_BOW_4_REGISTER = 0x4B
-TMC4361_SH_RAMP_MODE_REGISTER = 0x4C
-TMC4361_ENCODER_POSITION_REGISTER = 0x50
-TMC4361_ENCODER_INPUT_RESOLUTION_REGISTER = 0x54
-TMC4361_COVER_HIGH_REGISTER = 0x6D
-TMC4361_COVER_DRV_HIGH_REGISTER = 0x6F
-
-# how to mask REFERENCE_CONFIG_REGISTER if you want to configure just one end
-TMC4361_LEFT_ENDSTOP_REGISTER_PATTERN = (_BV(0) | _BV(2) | _BV(6) | _BV(10) | _BV(11) | _BV(14))
-TMC4361_RIGHT_ENDSTOP_REGISTER_PATTERN = (_BV(1) | _BV(3) | _BV(7) | _BV(12) | _BV(13) | _BV(15))
-
 class StatusEventRegister(Register):
   """
   """
