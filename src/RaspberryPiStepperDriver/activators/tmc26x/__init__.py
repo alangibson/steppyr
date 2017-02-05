@@ -3,6 +3,7 @@ import RPi.GPIO as GPIO
 from RaspberryPiStepperDriver import tobin, set_bit, unset_bit, constrain
 from .registers import *
 from RaspberryPiStepperDriver.activators.stepdir import StepDirActivator
+from RaspberryPiStepperDriver.lib.trinamic import MICROSTEP_RESOLUTION
 
 """
 Ported to Python from https://github.com/trinamic/TMC26XStepper

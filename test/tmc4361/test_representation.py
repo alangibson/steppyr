@@ -23,10 +23,10 @@ class TestRepresentation(unittest.TestCase):
     self.assertEqual(value, 44.015625)
 
   def test_like_mask(self):
-    register_value = 0b1111111111 # 10 bits
+    register_value = 0b1101111111 
     rep = Representation(0, 7) # an 8 bit int
     value = rep.from_register_value(register_value)
-    self.assertEqual(value, 255)
+    self.assertEqual(value, 127)
 
   def test_like_bv(self):
     """Test that Representation covers case of _BV, ie picking out bit flags"""

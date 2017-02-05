@@ -186,8 +186,6 @@ TMC4361_POSITION_COMPARE_REGISTER = 0x32
 TMC4361_VIRTUAL_STOP_LEFT_REGISTER = 0x33
 TMC4361_VIRTUAL_STOP_RIGHT_REGISTER = 0x34
 TMC4361_X_LATCH_REGISTER = 0x36
-# RW. Target position; signed; 32 bits.
-TMC4361_X_TARGET_REGISTER = 0x37
 TMC4361_X_TARGET_PIPE_0_REGSISTER = 0x38
 # Shadow Register
 #   Some applications require a complete new ramp parameter set for a specific ramp
@@ -305,6 +303,14 @@ class AMaxRegister(Register):
     #     a[∆v per clk_cycle]= AMAX / 237
     #     AMAX [pps2] = AMAX / 237 • fCLK2
     'AMAX': Representation(0, 23, 22, 2, False)
+  })
+class XTargetRegister(Register):
+  REGISTER = 0x37
+  bits = AttributeDict({
+    # RW 31:0 X_TARGET (Default: 0x00000000)
+    # Target motor position in positioning mode
+    #  signed; 32 bits.
+    'XTARGET': Representation(0, 31, 32, 0, True)
   })
 class DMaxRegister(Register):
   REGISTER = 0x29
