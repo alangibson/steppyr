@@ -25,12 +25,6 @@ def decode_twos_complement(input_value, num_bits):
 number_to_fixed = lambda float_value, fractional_bits: int(float_value * (1 << fractional_bits))
 fixed_to_number = lambda fixed_value, fractional_bits: fixed_value * (2**-fractional_bits)
 
-def unpack_bitmask_dict(bitmask_dict):
-  if type(bitmask_dict) == dict:
-    return (bitmask_dict['bitmask'], bitmask_dict['format'])
-  else:
-    return (bitmask_dict, None)
-
 class AttributeDict(dict):
   __getattr__ = dict.__getitem__
   __setattr__ = dict.__setitem__
@@ -81,7 +75,8 @@ class Representation:
     # Apply bitmask to extract bits from encoded register value
     value = get_bits(register_value, self.bitmask)
     # Handle signed
-    value = decode_twos_complement(value, self._whole_bits + self._fractional_bits)
+    if self._signed:
+      value = decode_twos_complement(value, self._whole_bits + self._fractional_bits)
     # Convert fixed point to floating point or int
     return fixed_to_number(value, self._fractional_bits)
 
