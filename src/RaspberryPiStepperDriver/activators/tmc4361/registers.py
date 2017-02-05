@@ -44,6 +44,10 @@ class Representation:
     https://ucexperiment.wordpress.com/2012/10/28/fixed-point-math-on-the-arduino-platform/
   """
   def __init__(self, first_bit, last_bit=None, whole_bits=None, fractional_bits=0, signed=False):
+    """
+    first_bit: lsb
+    last_bit: msb
+    """
     self._first_bit = first_bit
     if last_bit == None:
       # When last_bit == None, we are acting like _BV
@@ -74,6 +78,8 @@ class Representation:
   def from_register_value(self, register_value):
     # Apply bitmask to extract bits from encoded register value
     value = get_bits(register_value, self.bitmask)
+    # FIXME handle case where self._last_bit > whole_bits + fractional_bits
+    # test case: test_mismatch
     # Handle signed
     if self._signed:
       value = decode_twos_complement(value, self._whole_bits + self._fractional_bits)
@@ -222,14 +228,16 @@ class VActualRegister(Register):
     # R. Current step velocity; 24 bits; signed; no decimals.
     # Bit 31:0: Actual ramp generator velocity [pulses per second]:
     #   1 pps ≤ |VACTUAL| ≤ CLK_FREQ · 1/2 pulses (fCLK = 16 MHz -> 8 Mpps)
-    'VACTUAL': Representation(0, 31, 24, 0, True)
+    # TODO actually Representation(0, 31, 24, 0, True). Representation needs bug fix
+    'VACTUAL': Representation(0, 23, 24, 0, True)
   })
 class AActualRegister(Register):
   REGISTER = 0x23
   bits = AttributeDict({
     # R. 31:0 AACTUAL (Default: 0x00000000)
     # Current step acceleration; 24 bits; signed; no decimals.
-    'AACTUAL': Representation(0, 31, 24, 0, True)
+    # TODO actually Representation(0, 31, 24, 0, True). Representation needs bug fix
+    'AACTUAL': Representation(0, 23, 24, 0, True)
   })
 class VMaxRegister(Register):
   REGISTER = 0x24
