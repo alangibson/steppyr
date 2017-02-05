@@ -39,16 +39,25 @@ class Representation:
   """
   Value Representation
 
+  Valid use:
+  Representation(5) = _BV(5)
+  Representation(0, 10) = mask(0, 10)
+  Representation(0, 15, 16) = unsigned 16bit int in register bits 0:15
+  Representation(0, 15, 8, 8, True) = signed (twos-compliment) 8bit.8bit float
+    in register bits 0:15
+
   Fixed Point Math on the Arduino Platform
     https://ucexperiment.wordpress.com/2012/10/28/fixed-point-math-on-the-arduino-platform/
   """
   def __init__(self, first_bit, last_bit=None, whole_bits=None, fractional_bits=0, signed=False):
     self._first_bit = first_bit
     if last_bit == None:
+      # When last_bit == None, we are acting like _BV
       last_bit = first_bit
     self._last_bit = last_bit
     self.bitmask = mask(first_bit, last_bit)
     if whole_bits == None:
+      # When whole_bits == None, we are acting like mask() or _BV()
       self._whole_bits = last_bit + 1 # first/last_bit is 0 indexed
     else:
       self._whole_bits = whole_bits
@@ -56,13 +65,17 @@ class Representation:
     self._signed = signed
 
   def to_register_value(self, number):
+    """
+    Returns number encoded so that it can be directly ORed onto register data.
+    1. Convert floating point to fixed point. Int remains unchanged.
+    2. TODO Convert fixed point to twos-compliment. Positive remains unchanged.
+    3. Left shift until lsb is same index as first_bit.
+    """
     # TODO handle signed
     # Convert to fixed point
     value = number_to_fixed(number, self._fractional_bits)
-    # Just apply the bitmask itself
-    # self._data = set_bit(number, bitmask)
-    # Apply value at bitmask bits
-    value = set_bit(unset_bit(value, self.bitmask), (value << lsb(self.bitmask)))
+    # Left shift until lsb is same index as first_bit.
+    value = value << self._first_bit
     return value
 
   def from_register_value(self, register_value):
@@ -77,7 +90,7 @@ class Register(Datagram):
     self._header = self.REGISTER
     self._data = data
 
-  def set(self, bitmask, value=None):
+  def set(self, representation, value=None):
     """
     value: (int or float) If float, a Representation is needed to encode to
            valid register value.
@@ -85,23 +98,14 @@ class Register(Datagram):
     1. integer bitmask (or really any integer)
     # Disabled: 2. dict like: {bitmask: mask(0, 30), representation: Representation(23, 8, False)}
     """
-
-    # Get representation and bitmask
-    representation = None
-    if type(bitmask) == Representation:
-      representation = bitmask
-      bitmask = representation.bitmask
-
-    # Apply Representation if requested
-    if representation:
+    if value == None:
+      # If we have no value, just apply the bitmask. Usefull for setting bit flags.
+      self._data = set_bit(self._data, representation.bitmask)
+    else:
       # Encode value to register value using Representation
       value = representation.to_register_value(value)
-    if value == None:
-      # Just apply the bitmask itself
-      self._data = set_bit(self._data, bitmask)
-    else:
-      # Apply value at bitmask bits
-      self._data = set_bit(unset_bit(self._data, bitmask), (value << lsb(bitmask)))
+      # Apply value at bitmask bits to register data
+      self._data = set_bit(unset_bit(self._data, representation.bitmask), value)
     return self
 
   def unset(self, bitmask):
@@ -113,16 +117,10 @@ class Register(Datagram):
 
   def get_values(self):
     events = []
-    for name, bitmask in self.bits.items():
-
-      # Get representation and bitmask
-      representation = None
-      if type(bitmask) == Representation:
-        representation = bitmask
-        bitmask = representation.bitmask
-
-      if self._data & bitmask:
-        events.append((name, bitmask))
+    for name, representation in self.bits.items():
+      value = self.get(representation)
+      if value:
+        events.append((name, value))
     return events
 
 # Reference Switch Configuration Register
@@ -398,7 +396,7 @@ class AStartRegister(Register):
     #       Consider maximum values, represented in section 6.7.5, page 50
     'ASTART': Representation(0, 23, 22, 2, False),
     # RW 31 Sign of AACTUAL after switching from external to internal step control.
-    'AACTUAL_SIGN': _BV(31)
+    'AACTUAL_SIGN': Representation(31)
   })
 class DFinalRegister(Register):
   REGISTER = 0x2B
@@ -422,68 +420,68 @@ class StatusEventRegister(Register):
   REGISTER = 0x0E
   bits = AttributeDict({
     # TARGET_REACHED has been triggered
-    'TARGET_REACHED': _BV(0),
+    'TARGET_REACHED': Representation(0),
     # POS_COMP_REACHED has been triggered.
-    'POS_COMP_REACHED': _BV(1),
+    'POS_COMP_REACHED': Representation(1),
     # VEL_REACHED has been triggered.
-    'VEL_REACHED': _BV(2),
+    'VEL_REACHED': Representation(2),
     # VEL_STATE': b’00 has been triggered (VACTUAL = 0).
-    'VACTUAL_EQ_0': _BV(3),
+    'VACTUAL_EQ_0': Representation(3),
     # VEL_STATE = b’01 has been triggered (VACTUAL > 0).
-    'VACTUAL_GT_0': _BV(4),
+    'VACTUAL_GT_0': Representation(4),
     # VEL_STATE = b’10 has been triggered (VACTUAL < 0).
-    'VACTUAL_LT_0': _BV(5),
+    'VACTUAL_LT_0': Representation(5),
     # RAMP_STATE = b’00 has been triggered (AACTUAL = 0, VACTUAL is constant).
-    'RAMP_STATE_00': _BV(6),
+    'RAMP_STATE_00': Representation(6),
     # RAMP_STATE = b’01 has been triggered (|VACTUAL| increases).
-    'RAMP_STATE_01': _BV(7),
+    'RAMP_STATE_01': Representation(7),
     # RAMP_STATE = b’10 has been triggered (|VACTUAL| increases).
-    'RAMP_STATE_10': _BV(8),
+    'RAMP_STATE_10': Representation(8),
     # MAX_PHASE_TRAP: Trapezoidal ramp has reached its limit speed using maximum values for AMAX or DMAX (|VACTUAL| > VBREAK; VBREAK≠0).
-    'MAX_PHASE_TRAP': _BV(9),
+    'MAX_PHASE_TRAP': Representation(9),
     # FROZEN: NFREEZE has switched to low level. Reset TMC4361A for further motion.
-    'FROZEN': _BV(10),
+    'FROZEN': Representation(10),
     # STOPL has been triggered. Motion in negative direction is not executed until this event is cleared and (STOPL is not active any more or stop_left_en is set to 0).
-    'STOPL_TRIGGERED': _BV(11),
+    'STOPL_TRIGGERED': Representation(11),
     # STOPR has been triggered. Motion in positive direction is not executed until this event is cleared and (STOPR is not active any more or stop_right_en is set to 0).
-    'STOPR_TRIGGERED': _BV(12),
+    'STOPR_TRIGGERED': Representation(12),
     # VSTOPL_ACTIVE: VSTOPL has been activated. No further motion in negative direction until this event is cleared and (a new value is chosen for VSTOPL or virtual_left_limit_en is set to 0).
-    'VSTOPL_ACTIVE': _BV(13),
+    'VSTOPL_ACTIVE': Representation(13),
     # VSTOPR_ACTIVE: VSTOPR has been activated. No further motion in positive direction until this event is cleared and (a new value is chosen for VSTOPR or virtual_right_limit_en is set to 0).
-    'VSTOPR_ACTIVE': _BV(14),
+    'VSTOPR_ACTIVE': Representation(14),
     # HOME_ERROR: Unmatched HOME_REF polarity and HOME is outside of safety margin.
-    'HOME_ERROR': _BV(15),
+    'HOME_ERROR': Representation(15),
     # XLATCH_DONE indicates if X_LATCH was rewritten or homing process has been completed.
-    'XLATCH_DONE': _BV(16),
+    'XLATCH_DONE': Representation(16),
     # FS_ACTIVE: Fullstep motion has been activated.
-    'FS_ACTIVE': _BV(17),
+    'FS_ACTIVE': Representation(17),
     # ENC_FAIL: Mismatch between XACTUAL and ENC_POS has exceeded specified limit.
-    'ENC_FAIL': _BV(18),
+    'ENC_FAIL': Representation(18),
     # N_ACTIVE: N event has been activated.
-    'N_ACTIVE': _BV(19),
+    'N_ACTIVE': Representation(19),
     # ENC_DONE indicates if ENC_LATCH was rewritten.
-    'ENC_DONE': _BV(20),
+    'ENC_DONE': Representation(20),
     # SER_ENC_DATA_FAIL: Failure during multi-cycle data evaluation or between two consecutive data requests has occured.
-    'SER_ENC_DATA_FAIL': _BV(21),
+    'SER_ENC_DATA_FAIL': Representation(21),
     # 22: Reserved
     # SER_DATA_DONE: Configuration data was received from serial SPI encoder.
-    'SER_DATA_DONE': _BV(23),
+    'SER_DATA_DONE': Representation(23),
     # One of the SERIAL_ENC_Flags was set.
-    'SERIAL_ENC_FLAG_SET': _BV(24),
+    'SERIAL_ENC_FLAG_SET': Representation(24),
     # COVER_DONE: SPI datagram was sent to the motor driver.
-    'COVER_DONE': _BV(25),
+    'COVER_DONE': Representation(25),
     # ENC_VEL0: Encoder velocity has reached 0.
-    'ENC_VEL0': _BV(26),
+    'ENC_VEL0': Representation(26),
     # CL_MAX: Closed-loop commutation angle has reached maximum value.
-    'CL_MAX': _BV(27),
+    'CL_MAX': Representation(27),
     # CL_FIT: Closed-loop deviation has reached inner limit
-    'CL_FIT': _BV(28),
+    'CL_FIT': Representation(28),
     # STOP_ON_STALL: Motor stall detected. Motor ramp has stopped.
-    'STOP_ON_STALL': _BV(29),
+    'STOP_ON_STALL': Representation(29),
     # MOTOR_EV: One of the selected TMC motor driver flags was triggered.
-    'MOTOR_EV': _BV(30),
+    'MOTOR_EV': Representation(30),
     # RST_EV: Reset was triggered.
-    'RST_EV': _BV(31)
+    'RST_EV': Representation(31)
   })
 
 class SpiStatusSelectionRegister(Register):
@@ -504,33 +502,33 @@ class GeneralConfigurationRegister(Register):
     # use_astart_and_vstart (only valid for S-shaped ramps)
     # 0 Sets AACTUAL = AMAX or –AMAX at ramp start and in the case of VSTART ≠ 0.
     # 1 Sets AACTUAL = ASTART or –ASTART at ramp start and in the case of VSTART ≠ 0.
-    'USE_ASTART_AND_VSTART': _BV(0),
+    'USE_ASTART_AND_VSTART': Representation(0),
     # 0 Acceleration values are divided by CLK_FREQ.
     # 1 Acceleration values are set directly as steps per clock cycle.
-    'DIRECT_ACC_VAL_EN': _BV(1),
+    'DIRECT_ACC_VAL_EN': Representation(1),
     # 0 Bow values are calculated due to division by CLK_FREQ.
     # 1 Bow values are set directly as steps per clock cycle.
-    'DIRECT_BOW_VAL_EN': _BV(2),
+    'DIRECT_BOW_VAL_EN': Representation(2),
     # 0 STPOUT = 1 indicates an active step.
     # 1 STPOUT = 0 indicates an active step.
-    'STEP_INACTIVE_POL': _BV(3),
+    'STEP_INACTIVE_POL': Representation(3),
     # 0 Only STPOUT transitions from inactive to active polarity indicate steps.
     # 1 Every level change of STPOUT indicates a step.
-    'TOGGLE_STEP': _BV(4),
+    'TOGGLE_STEP': Representation(4),
     # 0 DIROUT = 0 indicates negative direction.
     # 1 DIROUT = 1 indicates negative direction.
-    'POL_DIR_OUT': _BV(5),
+    'POL_DIR_OUT': Representation(5),
     # 0 Internal step control (internal ramp generator will be used)
     # 1 External step control via STPIN / DIRIN interface with high active steps at STPIN
     # 2 External step control via STPIN / DIRIN interface with low active steps at STPIN
     # 3 External step control via STPIN / DIRIN interface with toggling steps at STPIN
-    'SDIN_MODE': _BV(6) | _BV(7),
+    'SDIN_MODE': Representation(6, 7),
     # 0 DIRIN = 0 indicates negative direction.
     # 1 DIRIN = 1 indicates negative direction.
-    'POL_DIR_IN': _BV(8),
+    'POL_DIR_IN': Representation(8),
     # 0 STPIN/DIRIN input signals will manipulate internal steps at XACTUAL directly.
     # 1 STPIN/DIRIN input signals will manipulate XTARGET register value, the internal ramp generator is used.
-    'SD_INDIRECT_CONTROL': _BV(9),
+    'SD_INDIRECT_CONTROL': Representation(9),
     # 0 An incremental encoder is connected to encoder interface.
     # 1 An absolute SSI encoder is connected to encoder interface.
     # 2 Reserved
@@ -538,7 +536,7 @@ class GeneralConfigurationRegister(Register):
     'SERIAL_ENC_IN_MODE': Representation(10, 11),
     # 0 Differential encoder interface inputs enabled.
     # 1 Differential encoder interface inputs is disabled (automatically set for SPI encoder).
-    'DIFF_ENC_IN_DISABLE': _BV(12),
+    'DIFF_ENC_IN_DISABLE': Representation(12),
     # 0 Standby signal becomes forwarded with an active low level at STDBY_CLK output.
     # 1 Standby signal becomes forwarded with an active high level at STDBY_CLK output.
     # 2 STDBY_CLK passes ChopSync clock (TMC23x, TMC24x stepper motor drivers only).
@@ -546,22 +544,22 @@ class GeneralConfigurationRegister(Register):
     'STDBY_CLK_PIN_ASSIGNMENT': Representation(13, 14),
     # 0 INTR=0 indicates an active interrupt.
     # 1 INTR=1 indicates an active interrupt.
-    'INTR_POL': _BV(15),
+    'INTR_POL': Representation(15),
     # 0 TARGET_REACHED signal is set to 1 to indicate a target reached event.
     # 1 TARGET_REACHED signal is set to 0 to indicate a target reached event.
-    'INVERT_POL_TARGET_REACHED': _BV(16),
+    'INVERT_POL_TARGET_REACHED': Representation(16),
     # 0 Clock gating is disabled.
     # 1 Internal clock gating is enabled.
-    'CLK_GATING_EN': _BV(17),
+    'CLK_GATING_EN': Representation(17),
     # 0 No clock gating during standby phase.
     # 1 Intenal clock gating during standby phase is enabled.
-    'CLK_GATING_STDBY_EN': _BV(18),
+    'CLK_GATING_STDBY_EN': Representation(18),
     # 0 Fullstep switchover is disabled.
     # 1 SPI output forwards fullsteps, if |VACTUAL| > FS_VEL
-    'FS_EN': _BV(19),
+    'FS_EN': Representation(19),
     # 0 No fullstep switchover for Step/Dir output is enabled.
     # 1 Fullsteps are forwarded via Step/Dir output also if fullstep operation is active.
-    'FS_SDOUT': _BV(20),
+    'FS_SDOUT': Representation(20),
     # 0 dcStep is disabled.
     # 1 dcStep signal generation will be selected automatically
     # 2 dcStep with external STEP_READY signal generation (TMC2130).
@@ -572,31 +570,31 @@ class GeneralConfigurationRegister(Register):
     'DCSTEP_MODE': Representation(21, 22),
     # 0 PWM output is disabled. Step/Dir output is enabled at STPOUT/DIROUT.
     # 1 STPOUT/DIROUT output pins are used as PWM output (PWMA/PWMB).
-    'PWM_OUT_EN': _BV(23),
+    'PWM_OUT_EN': Representation(23),
     # 0 No encoder is connected to SPI output.
     # 1 SPI output is used as SSI encoder interface to forward absolute SSI encoder data.
-    'SERIAL_ENC_OUT_ENABLE': _BV(24),
+    'SERIAL_ENC_OUT_ENABLE': Representation(24),
     # 0 Differential serial encoder output is enabled.
     # 1 Differential serial encoder output is disabled.
-    'SERIAL_ENC_OUT_DIFF_DISABLE': _BV(25),
+    'SERIAL_ENC_OUT_DIFF_DISABLE': Representation(25),
     # 0 VACTUAL=0 & AACTUAL=0 after switching off direct external step control.
     # 1 VACTUAL = VSTART and AACTUAL = ASTART after switching off direct external step control.
-    'AUTOMATIC_DIRECT_SDIN_SWITCH_OFF': _BV(26),
+    'AUTOMATIC_DIRECT_SDIN_SWITCH_OFF': Representation(26),
     # 0 The register value of X_LATCH is forwarded at register 0x36.
     # 1 The register value of REV_CNT (#internal revolutions) is forwarded at register 0x36.
-    'CIRCULAR_CNT_AS_XLATCH': _BV(27),
+    'CIRCULAR_CNT_AS_XLATCH': Representation(27),
     # 0 The direction of the internal SinLUT is regularly used.
     # 1 The direction of internal SinLUT is reversed
-    'REVERSE_MOTOR_DIR': _BV(28),
+    'REVERSE_MOTOR_DIR': Representation(28),
     # 0 INTR and TARGET_REACHED are outputs with strongly driven output values..
     # 1 INTR and TARGET_REACHED are used as outputs with gated pull-up and/or pull-down functionality.
-    'INTR_TR_PU_PD_EN': _BV(29),
+    'INTR_TR_PU_PD_EN': Representation(29),
     # 0 INTR output function is used as Wired-Or in the case of intr_tr_pu_pd_en = 1.
     # 1 INTR output function is used as Wired-And. in the case of intr_tr_pu_pd_en = 1.
-    'INTR_AS_WIRED_AND': _BV(30),
+    'INTR_AS_WIRED_AND': Representation(30),
     # 0 TARGET_REACHED output function is used as Wired-Or in the case of intr_tr_pu_pd_en = 1.
     # 1 TARGET_REACHED output function is used as Wired-And in the case of intr_tr_pu_pd_en = 1.
-    'TR_AS_WIRED_AND': _BV(31)
+    'TR_AS_WIRED_AND': Representation(31)
   })
 
 class RampModeRegister(Register):
@@ -613,7 +611,7 @@ class RampModeRegister(Register):
     # Bit 2: Operation Mode:
     #   1 Positioning mode: XTARGET is superior target of velocity ramp.
     #   0 Velocitiy mode: VMAX is superior target of velocity ramp.
-    'OPERATION_MODE': _BV(2)
+    'OPERATION_MODE': Representation(2)
   })
 
 class ExternalClockFrequencyRegister(Register):
@@ -653,11 +651,11 @@ class StatusFlagRegister(Register):
   REGISTER = 0x0F
   bits = AttributeDict({
     # 0 TARGET_REACHED_F is set high if XACTUAL = XTARGET
-    'TARGET_REACHED_F': _BV(0),
+    'TARGET_REACHED_F': Representation(0),
     # 1 POS_COMP_REACHED_F is set high if XACTUAL = POS_COMP
-    'POS_COMP_REACHED_F': _BV(1),
+    'POS_COMP_REACHED_F': Representation(1),
     # 2 VEL_REACHED_F is set high if VACTUAL = |VMAX|
-    'VEL_REACHED_F': _BV(2),
+    'VEL_REACHED_F': Representation(2),
     # 4:3 VEL_STATE_F: Current velocity state: 0  VACTUAL = 0;
     #   1  VACTUAL > 0;
     #   2  VACTUAL < 0
@@ -667,59 +665,59 @@ class StatusFlagRegister(Register):
     #   2  AACTUAL decreases (deceleration)
     'RAMP_STATE_F': Representation(5, 6),
     # 7 STOPL_ACTIVE_F: Left stop switch is active.
-    'STOPL_ACTIVE_F': _BV(7),
+    'STOPL_ACTIVE_F': Representation(7),
     # 8 STOPR_ACTIVE_F: Right stop switch is active.
-    'STOPR_ACTIVE_F': _BV(8),
+    'STOPR_ACTIVE_F': Representation(8),
     # 9 VSTOPL_ACTIVE_F: Left virtual stop switch is active.
-    'VSTOPL_ACTIVE_F': _BV(9),
+    'VSTOPL_ACTIVE_F': Representation(9),
     # 10 VSTOPR_ACTIVE_F: Right virtual stop switch is active.
-    'VSTOPR_ACTIVE_F': _BV(10),
+    'VSTOPR_ACTIVE_F': Representation(10),
     # 11 ACTIVE_STALL_F: Motor stall is detected and VACTUAL > VSTALL_LIMIT.
-    'ACTIVE_STALL_F': _BV(11),
+    'ACTIVE_STALL_F': Representation(11),
     # 12 HOME_ERROR_F: HOME_REF input signal level is not equal to expected home level.
-    'HOME_ERROR_F': _BV(12),
+    'HOME_ERROR_F': Representation(12),
     # 13 FS_ACTIVE_F: Fullstep operation is active.
-    'FS_ACTIVE_F': _BV(13),
+    'FS_ACTIVE_F': Representation(13),
     # 14 ENC_FAIL_F: Mismatch between XACTUAL and ENC_POS is out of tolerated range.
-    'ENC_FAIL_F': _BV(14),
+    'ENC_FAIL_F': Representation(14),
     # 15 N_ACTIVE_F: N event is active.
-    'N_ACTIVE_F': _BV(15),
+    'N_ACTIVE_F': Representation(15),
     # 16 ENC_LATCH_F: ENC_LATCH is rewritten.
-    'ENC_LATCH_F': _BV(16),
+    'ENC_LATCH_F': Representation(16),
     # 17 Applies to absolute encoders only:
     #    MULTI_CYCLE_FAIL_F indicates a failure during last multi cycle data evaluation.
     #    Applies to absolute encoders only:
     #    SER_ENC_VAR_F indicates a failure during last serial data evaluation due to a substantial
     #    deviation between two consecutive serial data values.
-    # TODO '': _BV(),
+    # TODO '': Representation(),
     # 18 Reserved.
     # 19 CL_FIT_F: Active if ENC_POS_DEV < CL_TOLERANCE. The current mismatch
     #    between XACTUAL and ENC_POS is within tolerated range.
-    'CL_FIT_F': _BV(19),
+    'CL_FIT_F': Representation(19),
     # 23:20 Applies to absolute encoders only: SERIAL_ENC_FLAGS received from
     #   encoder. These flags are reset with a new encoder transfer request.
     'SERIAL_ENC_FLAGS': Representation(20, 23),
     # 24 TMC26x / TMC2130 only: SG: StallGuard2 status
     #    Optional for TMC24x only: Calculated stallGuard status.
     #    TMC23x / TMC24x only: UV_SF: Undervoltage flag.
-    'SG_OR_UV_SF': _BV(24),
+    'SG_OR_UV_SF': Representation(24),
     # 25 All TMC motor drivers: OT: Overtemperature shutdown.
-    'OT_SHUTDOWN_F': _BV(25),
+    'OT_SHUTDOWN_F': Representation(25),
     # 26 All TMC motor drivers: OTPW: Overtemperature warning.
-    'OT_WARNING_F': _BV(26),
+    'OT_WARNING_F': Representation(26),
     # 27 TMC26x / TMC2130 only: S2GA: Short to ground detection bit for high side MOSFE of coil A.
     #    TMC23x / TMC24x only: OCA: Overcurrent bridge A.
-    'S2G_A_OR_OC_A_F': _BV(27),
+    'S2G_A_OR_OC_A_F': Representation(27),
     # 28 TMC26x / TMC2130 only: S2GB: Short to ground detection bit for high side MOSFET of coil B.
     #    TMC23x / TMC24x only: OCB: Overcurrent bridge B.
-    'S2G_B_OR_OC_B_F': _BV(28),
+    'S2G_B_OR_OC_B_F': Representation(28),
     # 29 All TMC motor drivers: OLA: Open load indicator of coil A.
-    'OL_A_F': _BV(29),
+    'OL_A_F': Representation(29),
     # 30 All TMC motor drivers: OLB: Open load indicator of coil B.
-    'OL_B_F': _BV(30),
+    'OL_B_F': Representation(30),
     # 31 TMC26x / TMC2130 only: STST: Standstill indicator.
     #    TMC23x / TMC24x only: OCHS: Overcurrent high side.
-    'STST_OR_OCHS_F': _BV(31)
+    'STST_OR_OCHS_F': Representation(31)
   })
 
 class SPIOutConfRegister(Register):
@@ -759,11 +757,11 @@ class SPIOutConfRegister(Register):
     # 4 (TMC389 only)
     #   0 A 2-phase stepper motor driver is connected to the SPI output (TMC26x).
     #   1 A 3-phase stepper motor driver is connected to the SPI output (TMC389)
-    'THREE_PHASE_STEPPER_EN': _BV(4),
+    'THREE_PHASE_STEPPER_EN': Representation(4),
     # 4 (No TMC driver)
     #   0 NSCSDRV_SDO is tied low before SCKDRV_NSDO to initiate a new data transfer.
     #   1 SCKDRV_NSDO is tied low before NSCSDRV_SDO to initiate a new data transfer.
-    'SCK_LOW_BEFORE_CSN': _BV(4),
+    'SCK_LOW_BEFORE_CSN': Representation(4),
     # 5:4 (TMC23x/24x only)
     #   0 Both mixed decay bits are always off.
     #   1 Mixed decay bits are on during falling ramps until reaching a current value of 0.
@@ -776,27 +774,27 @@ class SPIOutConfRegister(Register):
     # 5 (TMC26x/2130 in SD mode only)
     #   0 No transfer of scale values.
     #   1 Transmission of current scale values to the appropriate driver registers.
-    'SCALE_VAL_TRANSFER_EN': _BV(5),
+    'SCALE_VAL_TRANSFER_EN': Representation(5),
     # 5 (No TMC driver)
     #   0 New value bit at SDODRV_SCLK is assigned at falling edge of SCKDRV_NSDO.
     #   1 New value bit at SDODRV_SCLK is assigned at rising edge of SCKDRV_NSDO.
-    'NEW_OUT_BIT_AT_RISE': _BV(5),
+    'NEW_OUT_BIT_AT_RISE': Representation(5),
     # 6 (TMC24x only)
     #   0 No standby datagram is sent.
     #   1 In case of a Stop-on-Stall event, a standby datagram is sent to the TMC24x.
-    'STDBY_ON_STALL_FOR_24X': _BV(6),
+    'STDBY_ON_STALL_FOR_24X': Representation(6),
     # 6 (TMC26x/2130 in SD mode only)
     #   0 Permanent transfer of polling datagrams to check driver status.
     #   1 No transfer of polling datagrams.
-    'DISABLE_POLLING': _BV(6),
+    'DISABLE_POLLING': Representation(6),
     # 7 (TMC24x only)
     #   0 Undervoltage flag of TMC24x is mapped at STATUS(24).
     #   1 Calculated stall status of TMC24x is forwarded at STATUS(24).
-    'STALL_FLAG_INSTEAD_OF_UV_EN': _BV(7),
+    'STALL_FLAG_INSTEAD_OF_UV_EN': Representation(7),
     # 7 (TMC26x/2130 only)
     #   0 No automatic continuous streaming of cover datagrams.
     #   1 Enabling of automatic continuous streaming of cover datagrams.
-    'AUTOREPEAT_COVER_EN': _BV(7),
+    'AUTOREPEAT_COVER_EN': Representation(7),
     # 11:7  (SPI-DAC only)
     # U Number of bits for command address.
     # 12 Reserved. Set to 0.
@@ -810,15 +808,15 @@ class SPIOutConfRegister(Register):
     # 11 (TMC24x only)
     #   0 No phase shift during PWM mode.
     #   1 During PWM mode, the internal SinLUT microstep position MSCNT is shifted to MS_OFFSET microsteps. Consequently, the sine/cosine values have a phase shift of (MS_OFFSET / 1024 ∙ 360°)
-    'PWM_PHASE_SHFT_EN': _BV(11),
+    'PWM_PHASE_SHFT_EN': Representation(11),
     # 12 (TMC23x/24x only)
     #   0 ChopSync frequency remains stable during standby.
     #   1 CHOP_SYNC_DIV is halfed during standby.
-    'DOUBLE_FREQ_AT_STDBY': _BV(12),
+    'DOUBLE_FREQ_AT_STDBY': Representation(12),
     # 12 (TMC26x/2130 only)
     #   0 COVER_DONE event is set for every datagram that is sent to the motor driver.
     #   1 COVER_DONE event is only set for cover datagrams sent to the motor driver.
-    'COVER_DONE_ONLY_FOR_COVER': _BV(12),
+    'COVER_DONE_ONLY_FOR_COVER': Representation(12),
     # Bit 19:13. COVER_DATA_LENGTH
     #   U Number of bits for the complete datagram length. Maximum value = 64
     #     Set to 0 in case a TMC stepper motor driver is selected. The datagram length is then
