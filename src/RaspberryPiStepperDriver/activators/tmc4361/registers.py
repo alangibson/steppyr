@@ -71,7 +71,6 @@ class Representation:
     2. TODO Convert fixed point to twos-compliment. Positive remains unchanged.
     3. Left shift until lsb is same index as first_bit.
     """
-    # TODO handle signed
     # Convert to fixed point
     value = number_to_fixed(number, self._fractional_bits)
     # Left shift until lsb is same index as first_bit.
@@ -79,9 +78,11 @@ class Representation:
     return value
 
   def from_register_value(self, register_value):
-    # TODO handle signed
     # Apply bitmask to extract bits from encoded register value
     value = get_bits(register_value, self.bitmask)
+    # Handle signed
+    value = decode_twos_complement(value, self._whole_bits + self._fractional_bits)
+    # Convert fixed point to floating point or int
     return fixed_to_number(value, self._fractional_bits)
 
 class Register(Datagram):
