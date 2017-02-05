@@ -226,7 +226,7 @@ class VActualRegister(Register):
   REGISTER = 0x22
   bits = AttributeDict({
     # R. Current step velocity; 24 bits; signed; no decimals.
-    # Bit 31:0: Actual ramp generator velocity [pulses per second]:
+    # R. Bit 31:0: Actual ramp generator velocity [pulses per second]:
     #   1 pps ≤ |VACTUAL| ≤ CLK_FREQ · 1/2 pulses (fCLK = 16 MHz -> 8 Mpps)
     # TODO actually Representation(0, 31, 24, 0, True). Representation needs bug fix
     'VACTUAL': Representation(0, 23, 24, 0, True)
@@ -243,15 +243,20 @@ class VMaxRegister(Register):
   REGISTER = 0x24
   bits = AttributeDict({
     # RW 31:0 VMAX (Default: 0x00000000)
+    # Defined as pulses per second [pps].
     # Maximum ramp generator velocity in positioning mode or
     # Target ramp generator velocity in velocity mode and no ramp motion profile.
-    # Value representation: signed; 32 bits= 24+8 (24 bits integer part, 8 bits decimal places).
+    # Value representation: signed; 32 bits = 24+8 (24 bits integer part, 8 bits decimal places).
+    # The maximum velocity VMAX is restricted as follows:
+    #   Velocity mode: |VMAX| ≤ ½ pulse · fCLK
+    #   Positioning mode: |VMAX| ≤ ¼ pulse · fCLK
     'VMAX': Representation(0, 31, 24, 8, True)
   })
 class VStartRegister(Register):
   REGISTER = 0x25
   bits = AttributeDict({
     # RW 30:0 VSTART (Default: 0x00000000)
+    # Defined as pulses per second [pps].
     # Absolute start velocity in positioning mode and velocity mode
     # In case VSTART is used: no first bow phase B1 for S-shaped ramps
     # VSTART in positioning mode:
@@ -267,6 +272,7 @@ class VStopRegister(Register):
   REGISTER = 0x26
   bits = AttributeDict({
     # RW 30:0 VSTOP (Default:0x00000000)
+    # Defined as pulses per second [pps].
     # Absolute stop velocity in positioning mode and velocity mode.
     # In case VSTOP is used: no last bow phase B4 for S-shaped ramps.
     # In case VSTOP is very small and positioning mode is used, it is possible that the
@@ -282,6 +288,7 @@ class VBreakRegister(Register):
   REGISTER = 0x27
   bits = AttributeDict({
     # RW 30:0 VBREAK (Default:0x00000000)
+    # Defined as pulses per second [pps].
     # Absolute break velocity in positioning mode and in velocity mode,
     # This only applies for trapezoidal ramp motion profiles.
     # In case VBREAK = 0: pure linear ramps are generated with AMAX / DMAX only.
@@ -628,6 +635,8 @@ class ExternalClockFrequencyRegister(Register):
   REGISTER = 0x31
   bits = AttributeDict({
     # RW. External clock frequency fCLK; unsigned; 25 bits.
+    # Set to proper Hz value which is defined by the external clock frequency
+    # fCLK. Any value between fCLK = 4.2 MHz and 32 MHz can be selected.
     'EXTERNAL_CLOCK_FREQUENCY': Representation(0, 24)
   })
 
