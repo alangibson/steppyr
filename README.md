@@ -1,6 +1,6 @@
-# RaspberryPiStepperDriver
+# steppyr
 
-Python Raspberry Pi library for the STEP/DIR stepper drivers.
+A stepper motor library in Python
 
 ## Installation
 
