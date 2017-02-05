@@ -42,17 +42,34 @@ class Representation:
   Fixed Point Math on the Arduino Platform
     https://ucexperiment.wordpress.com/2012/10/28/fixed-point-math-on-the-arduino-platform/
   """
-  def __init__(self, digit_bits, decimal_bits=0, signed=False):
-    self._digit_bits = digit_bits
-    self._decimal_bits = decimal_bits
+  def __init__(self, first_bit, last_bit=None, whole_bits=None, fractional_bits=0, signed=False):
+    self._first_bit = first_bit
+    if last_bit == None:
+      last_bit = first_bit
+    self._last_bit = last_bit
+    self.bitmask = mask(first_bit, last_bit)
+    if whole_bits == None:
+      self._whole_bits = last_bit + 1 # first/last_bit is 0 indexed
+    else:
+      self._whole_bits = whole_bits
+    self._fractional_bits = fractional_bits
     self._signed = signed
 
   def to_register_value(self, number):
     # TODO handle signed
-    return number_to_fixed(number, self._decimal_bits)
+    # Convert to fixed point
+    value = number_to_fixed(number, self._fractional_bits)
+    # Just apply the bitmask itself
+    # self._data = set_bit(number, bitmask)
+    # Apply value at bitmask bits
+    value = set_bit(unset_bit(value, self.bitmask), (value << lsb(self.bitmask)))
+    return value
 
-  def from_register_value(self, number):
-    return fixed_to_number(number, self._decimal_bits)
+  def from_register_value(self, register_value):
+    # TODO handle signed
+    # Apply bitmask to extract bits from encoded register value
+    value = get_bits(register_value, self.bitmask)
+    return fixed_to_number(value, self._fractional_bits)
 
 class Register(Datagram):
 
@@ -60,7 +77,7 @@ class Register(Datagram):
     self._header = self.REGISTER
     self._data = data
 
-  def set(self, bitmask, value=None, representation=None):
+  def set(self, bitmask, value=None):
     """
     value: (int or float) If float, a Representation is needed to encode to
            valid register value.
@@ -68,10 +85,13 @@ class Register(Datagram):
     1. integer bitmask (or really any integer)
     # Disabled: 2. dict like: {bitmask: mask(0, 30), representation: Representation(23, 8, False)}
     """
-    # Unpack bitmask if it is a dict
-    bitmask, unpacked_representation = unpack_bitmask_dict(bitmask)
-    if not representation:
-      representation = unpacked_representation
+
+    # Get representation and bitmask
+    representation = None
+    if type(bitmask) == Representation:
+      representation = bitmask
+      bitmask = representation.bitmask
+
     # Apply Representation if requested
     if representation:
       # Encode value to register value using Representation
@@ -88,22 +108,19 @@ class Register(Datagram):
     self._data = unset_bit(self._data, bitmask)
     return self
 
-  def get(self, bitmask, representation=None):
-    # Unpack bitmask if it is a dict
-    bitmask, unpacked_representation = unpack_bitmask_dict(bitmask)
-    if not representation:
-      representation = unpacked_representation
-    # Apply mask to get value from data
-    value = get_bits(self._data, bitmask)
-    # Apply Representation if requested
-    if representation:
-      # Encode value to register value using Representation
-      value = representation.from_register_value(value)
-    return value
+  def get(self, representation):
+    return representation.from_register_value(self._data)
 
   def get_values(self):
     events = []
     for name, bitmask in self.bits.items():
+
+      # Get representation and bitmask
+      representation = None
+      if type(bitmask) == Representation:
+        representation = bitmask
+        bitmask = representation.bitmask
+
       if self._data & bitmask:
         events.append((name, bitmask))
     return events
@@ -205,7 +222,7 @@ class XActualRegister(Register):
     # RW. 31:0 XACTUAL (Default: 0x00000000)
     #   Actual internal motor position [pulses]: –2^31 ≤ XACTUAL ≤ 2^31 – 1
     #   signed; 32 bits
-    'XACTUAL': {'bitmask': mask(0, 31), 'format': Representation(32, 0, True)}
+    'XACTUAL': Representation(0, 31, 32, 0, True)
   })
 class VActualRegister(Register):
   REGISTER = 0x22
@@ -213,14 +230,14 @@ class VActualRegister(Register):
     # R. Current step velocity; 24 bits; signed; no decimals.
     # Bit 31:0: Actual ramp generator velocity [pulses per second]:
     #   1 pps ≤ |VACTUAL| ≤ CLK_FREQ · 1/2 pulses (fCLK = 16 MHz -> 8 Mpps)
-    'VACTUAL': {'bitmask': mask(0, 31), 'format': Representation(24, 0, True)}
+    'VACTUAL': Representation(0, 31, 24, 0, True)
   })
 class AActualRegister(Register):
   REGISTER = 0x23
   bits = AttributeDict({
     # R. 31:0 AACTUAL (Default: 0x00000000)
     # Current step acceleration; 24 bits; signed; no decimals.
-    'AACTUAL': {'bitmask': mask(0, 31), 'format': Representation(24, 0, True)}
+    'AACTUAL': Representation(0, 31, 24, 0, True)
   })
 class VMaxRegister(Register):
   REGISTER = 0x24
@@ -229,7 +246,7 @@ class VMaxRegister(Register):
     # Maximum ramp generator velocity in positioning mode or
     # Target ramp generator velocity in velocity mode and no ramp motion profile.
     # Value representation: signed; 32 bits= 24+8 (24 bits integer part, 8 bits decimal places).
-    'VMAX': {'bitmask': mask(0, 31), 'format': Representation(24, 8, True)}
+    'VMAX': Representation(0, 31, 24, 8, True)
   })
 class VStartRegister(Register):
   REGISTER = 0x25
@@ -244,7 +261,7 @@ class VStartRegister(Register):
     #   In case VACTUAL = 0 and VACTUAL ≠ VMAX:
     #   no acceleration phase for VACTUAL = 0  VSTART.
     # Value representation: 23 digits and 8 decimal places. unsigned; 31 bits=23+8.
-    'VSTART': {'bitmask': mask(0, 30), 'format': Representation(23, 8, False)}
+    'VSTART': Representation(0, 30, 23, 8, False)
   })
 class VStopRegister(Register):
   REGISTER = 0x26
@@ -259,7 +276,7 @@ class VStopRegister(Register):
     # VSTOP in velocity mode:
     #   In case VACTUAL ≤ VSTOP and VMAX = 0: VACTUAL is immediately set to 0.
     # Value representation: 23 digits and 8 decimal places. unsigned; 31 bits=23+8.
-    'VSTOP': {'bitmask': mask(0, 30), 'format': Representation(23, 8, False)}
+    'VSTOP': Representation(0, 30, 23, 8, False)
   })
 class VBreakRegister(Register):
   REGISTER = 0x27
@@ -272,7 +289,7 @@ class VBreakRegister(Register):
     # In case |VACTUAL| ≥ VBREAK: |AACTUAL| = AMAX or DMAX
     # Always set VBREAK > VSTOP! If VBREAK != 0.
     # Value representation: 23 digits and 8 decimal places. unsigned; 31 bits=23+8.
-    'VBREAK': {'bitmask': mask(0, 30), 'format': Representation(23, 8, False)}
+    'VBREAK': Representation(0, 30, 23, 8, False)
   })
 class AMaxRegister(Register):
   REGISTER = 0x28
@@ -288,7 +305,7 @@ class AMaxRegister(Register):
     #   Direct mode: [∆v per clk cycle]
     #     a[∆v per clk_cycle]= AMAX / 237
     #     AMAX [pps2] = AMAX / 237 • fCLK2
-    'AMAX': {'bitmask': mask(0, 23), 'format': Representation(22, 2, False)}
+    'AMAX': Representation(0, 23, 22, 2, False)
   })
 class DMaxRegister(Register):
   REGISTER = 0x29
@@ -304,7 +321,7 @@ class DMaxRegister(Register):
     #   Direct mode: [∆v per clk cycle]
     #     d[∆v per clk_cycle]= DMAX / 237
     #     DMAX [pps2] = DMAX / 237 • fCLK2
-    'DMAX': {'bitmask': mask(0, 23), 'format': Representation(22, 2, False)}
+    'DMAX': Representation(0, 23, 22, 2, False)
   })
 # RW. First bow value of a complete velocity ramp; unsigned; 24 bits=24+0 (24 bits integer part, no decimal places).
 class Bow1Register(Register):
@@ -315,10 +332,11 @@ class Bow1Register(Register):
     # Value representation:
     #   Frequency mode: [pulses per sec3]
     #     24 digits and 0 decimal places: 1 pps3 ≤ BOW1 ≤ 16 Mpps3
+    #      unsigned; 24 bits=24+0 (24 bits integer part, no decimal places).
     #   Direct mode: [∆a per clk cycle]
     #     bow[av per clk_cycle]= BOW1 / 253
     #     BOW1 [pps3] = BOW1 / 253 • fCLK3
-    'BOW1': mask(0, 23)
+    'BOW1': Representation(0, 23, 24, 0, False)
   })
 class Bow2Register(Register):
   REGISTER = 0x2e
@@ -332,7 +350,7 @@ class Bow2Register(Register):
     #   Direct mode: [∆a per clk cycle]
     #     bow[av per clk_cycle]= BOW2 / 253
     #     BOW2 [pps3] = BOW2 / 253 • fCLK3
-    'BOW2': mask(0, 23)
+    'BOW2': Representation(0, 23, 24, 0, False)
   })
 class Bow3Register(Register):
   REGISTER = 0x2f
@@ -346,7 +364,7 @@ class Bow3Register(Register):
     #   Direct mode: [∆a per clk cycle]
     #     bow[av per clk_cycle]= BOW3 / 253
     #     BOW3 [pps3] = BOW3 / 253 • fCLK3
-    'BOW3': mask(0, 23)
+    'BOW3': Representation(0, 23, 24, 0, False)
   })
 class Bow4Register(Register):
   REGISTER = 0x30
@@ -360,7 +378,7 @@ class Bow4Register(Register):
     #   Direct mode: [∆a per clk cycle]
     #     bow[av per clk_cycle]= BOW4 / 253
     #     BOW4 [pps3] = BOW4 / 253 • fCLK3
-    'BOW4': mask(0, 23)
+    'BOW4': Representation(0, 23, 24, 0, False)
   })
 class AStartRegister(Register):
   REGISTER = 0x2A
@@ -378,7 +396,7 @@ class AStartRegister(Register):
     #       a[∆v per clk_cycle]= ASTART / 237
     #       ASTART [pps2] = ASTART / 237 • fCLK2
     #       Consider maximum values, represented in section 6.7.5, page 50
-    'ASTART': {'bitmask': mask(0, 23), 'format': Representation(22, 2, False)},
+    'ASTART': Representation(0, 23, 22, 2, False),
     # RW 31 Sign of AACTUAL after switching from external to internal step control.
     'AACTUAL_SIGN': _BV(31)
   })
@@ -396,7 +414,7 @@ class DFinalRegister(Register):
     #     Direct mode: [∆v per clk cycle]
     #       d[∆v per clk_cycle]= DFINAL / 237
     #       DFINAL [pps2] = DFINAL / 237 • fCLK2
-    'DFINAL': {'bitmask': mask(0, 23), 'format': Representation(22, 2, False)}
+    'DFINAL': Representation(0, 23, 22, 2, False)
   })
 class StatusEventRegister(Register):
   """
@@ -517,7 +535,7 @@ class GeneralConfigurationRegister(Register):
     # 1 An absolute SSI encoder is connected to encoder interface.
     # 2 Reserved
     # 3 An absolute SPI encoder is connected to encoder interface
-    'SERIAL_ENC_IN_MODE': mask(10, 11),
+    'SERIAL_ENC_IN_MODE': Representation(10, 11),
     # 0 Differential encoder interface inputs enabled.
     # 1 Differential encoder interface inputs is disabled (automatically set for SPI encoder).
     'DIFF_ENC_IN_DISABLE': _BV(12),
@@ -525,7 +543,7 @@ class GeneralConfigurationRegister(Register):
     # 1 Standby signal becomes forwarded with an active high level at STDBY_CLK output.
     # 2 STDBY_CLK passes ChopSync clock (TMC23x, TMC24x stepper motor drivers only).
     # 3 Internal clock is forwarded to STDBY_CLK output pin.
-    'STDBY_CLK_PIN_ASSIGNMENT': mask(13, 14),
+    'STDBY_CLK_PIN_ASSIGNMENT': Representation(13, 14),
     # 0 INTR=0 indicates an active interrupt.
     # 1 INTR=1 indicates an active interrupt.
     'INTR_POL': _BV(15),
@@ -551,7 +569,7 @@ class GeneralConfigurationRegister(Register):
     #   TMC26x config: use const_toff-Chopper (CHM = 1);
     #   slow decay only (HSTRRT = 0);
     #   TST = 1 and SGT0=SGT1=1 (on_state_xy).
-    'DCSTEP_MODE': mask(21, 22),
+    'DCSTEP_MODE': Representation(21, 22),
     # 0 PWM output is disabled. Step/Dir output is enabled at STPOUT/DIROUT.
     # 1 STPOUT/DIROUT output pins are used as PWM output (PWMA/PWMB).
     'PWM_OUT_EN': _BV(23),
@@ -591,7 +609,7 @@ class RampModeRegister(Register):
     #   0: No ramp: VACTUAL follows only VMAX (rectangle velocity shape).
     #   1: Trapezoidal ramp (incl. sixPoint ramp): Consideration of acceleration and deceleration values for generating VACTUAL without adapting the acceleration values.
     #   2: S-shaped ramp: Consideration of all ramp values (incl. bow values) for generating VACTUAL.
-    'MOTION_PROFILE': mask(0, 1),
+    'MOTION_PROFILE': Representation(0, 1),
     # Bit 2: Operation Mode:
     #   1 Positioning mode: XTARGET is superior target of velocity ramp.
     #   0 Velocitiy mode: VMAX is superior target of velocity ramp.
@@ -602,7 +620,7 @@ class ExternalClockFrequencyRegister(Register):
   REGISTER = 0x31
   bits = AttributeDict({
     # RW. External clock frequency fCLK; unsigned; 25 bits.
-    'EXTERNAL_CLOCK_FREQUENCY': mask(0, 24)
+    'EXTERNAL_CLOCK_FREQUENCY': Representation(0, 24)
   })
 
 class MotorDriverSettingsRegister(Register):
@@ -621,13 +639,13 @@ class MotorDriverSettingsRegister(Register):
     # 6 4 microsteps per fullstep.
     # 7 Halfsteps: 2 microsteps per fullstep.
     # 8 Full steps (maximum possible setting)
-    'MSTEP_PER_FS': mask(0, 3),
+    'MSTEP_PER_FS': Representation(0, 3),
     # 15:4 Fullsteps per motor axis revolution
-    'FS_PER_REV': mask(4, 15),
+    'FS_PER_REV': Representation(4, 15),
     # 23:16 Selection of motor driver status bits for SPI response datagrams: ORed
     # with Motor Driver Status Register Set (7:0): if set here and a particular
     # flag is set from the motor stepper driver, an event will be generated at EVENTS(30)
-    'MSTATUS_SELECTION': mask(16, 23)
+    'MSTATUS_SELECTION': Representation(16, 23)
     # 31:24 Reserved. Set to 0x00.
   })
 
@@ -643,11 +661,11 @@ class StatusFlagRegister(Register):
     # 4:3 VEL_STATE_F: Current velocity state: 0  VACTUAL = 0;
     #   1  VACTUAL > 0;
     #   2  VACTUAL < 0
-    'VEL_STATE_F': mask(3, 4),
+    'VEL_STATE_F': Representation(3, 4),
     # 6:5 RAMP_STATE_F: Current ramp state: 0  AACTUAL = 0;
     #   1  AACTUAL increases (acceleration);
     #   2  AACTUAL decreases (deceleration)
-    'RAMP_STATE_F': mask(5, 6),
+    'RAMP_STATE_F': Representation(5, 6),
     # 7 STOPL_ACTIVE_F: Left stop switch is active.
     'STOPL_ACTIVE_F': _BV(7),
     # 8 STOPR_ACTIVE_F: Right stop switch is active.
@@ -680,7 +698,7 @@ class StatusFlagRegister(Register):
     'CL_FIT_F': _BV(19),
     # 23:20 Applies to absolute encoders only: SERIAL_ENC_FLAGS received from
     #   encoder. These flags are reset with a new encoder transfer request.
-    'SERIAL_ENC_FLAGS': mask(20, 23),
+    'SERIAL_ENC_FLAGS': Representation(20, 23),
     # 24 TMC26x / TMC2130 only: SG: StallGuard2 status
     #    Optional for TMC24x only: Calculated stallGuard status.
     #    TMC23x / TMC24x only: UV_SF: Undervoltage flag.
@@ -737,7 +755,7 @@ class SPIOutConfRegister(Register):
     #  13 SPI output interface is connected with a TMC2130 stepper motor driver.
     #     Configuration and current data are transferred to the stepper motor driver.
     #  15 Only cover datagrams are transferred via SPI output interface.
-    'SPI_OUTPUT_FORMAT': mask(0, 3),
+    'SPI_OUTPUT_FORMAT': Representation(0, 3),
     # 4 (TMC389 only)
     #   0 A 2-phase stepper motor driver is connected to the SPI output (TMC26x).
     #   1 A 3-phase stepper motor driver is connected to the SPI output (TMC389)
@@ -751,10 +769,10 @@ class SPIOutConfRegister(Register):
     #   1 Mixed decay bits are on during falling ramps until reaching a current value of 0.
     #   2 Mixed decay bits are always on, except during standstill.
     #   3 Mixed decay bits are always on.
-    'MIXED_DECAY': mask(4, 5),
+    'MIXED_DECAY': Representation(4, 5),
     # 23:4 (Serial encoder output only)
     #   U Monoflop time for SSI output interface: Delay time [clock cycles] during which the absolute encoder data remain stable after the last master request.
-    'SSI_OUT_MTIME': mask(4, 23),
+    'SSI_OUT_MTIME': Representation(4, 23),
     # 5 (TMC26x/2130 in SD mode only)
     #   0 No transfer of scale values.
     #   1 Transmission of current scale values to the appropriate driver registers.
@@ -782,13 +800,13 @@ class SPIOutConfRegister(Register):
     # 11:7  (SPI-DAC only)
     # U Number of bits for command address.
     # 12 Reserved. Set to 0.
-    'DAC_CMD_LENGTH': mask(7, 11),
+    'DAC_CMD_LENGTH': Representation(7, 11),
     # 10:8 (TMC24x only)
     #   U A stall is detected if the stall limit value STALL_LOAD_LIMIT is higher than the combination of the load bits (LD2&LD1&LD0).
-    'STALL_LOAD_LIMIT': mask(8, 10),
+    'STALL_LOAD_LIMIT': Representation(8, 10),
     # 11:8 (TMC26x in SD mode only, TMC2130 only)
     #   U Multiplier for calculating the time interval between two consecutive polling datagrams: tPOLL = 2^POLL_BLOCK_EXP ∙ SPI_OUT_BLOCK_TIME / fCLK
-    'POLL_BLOCK_EXP': mask(8, 11),
+    'POLL_BLOCK_EXP': Representation(8, 11),
     # 11 (TMC24x only)
     #   0 No phase shift during PWM mode.
     #   1 During PWM mode, the internal SinLUT microstep position MSCNT is shifted to MS_OFFSET microsteps. Consequently, the sine/cosine values have a phase shift of (MS_OFFSET / 1024 ∙ 360°)
@@ -805,17 +823,17 @@ class SPIOutConfRegister(Register):
     #   U Number of bits for the complete datagram length. Maximum value = 64
     #     Set to 0 in case a TMC stepper motor driver is selected. The datagram length is then
     #     selected automatically.
-    'COVER_DATA_LENGTH': mask(13, 19),
+    'COVER_DATA_LENGTH': Representation(13, 19),
     # Bits 23:20. SPI_OUT_LOW_TIME
     #   U Number of clock cycles the SPI output clock remains at low level.
-    'SPI_OUT_LOW_TIME': mask(20, 23),
+    'SPI_OUT_LOW_TIME': Representation(20, 23),
     # Bits 27:24. SPI_OUT_HIGH_TIME
     #   U Number of clock cycles the SPI output clock remains at high level
-    'SPI_OUT_HIGH_TIME': mask(24, 27),
+    'SPI_OUT_HIGH_TIME': Representation(24, 27),
     # Bits 31:28. SPI_OUT_BLOCK_TIME
     #   U Number of clock cycles the NSCSDRV output remains high (inactive) after a SPI
     #     output transmission
-    'SPI_OUT_BLOCK_TIME': mask(28, 31)
+    'SPI_OUT_BLOCK_TIME': Representation(28, 31)
   })
 
 class CoverLowRegister(Register):
@@ -824,7 +842,7 @@ class CoverLowRegister(Register):
   """
   REGISTER = 0x6C
   bits = AttributeDict({
-    'COVER_LOW_OR_POLLING_STATUS': mask(0, 31)
+    'COVER_LOW_OR_POLLING_STATUS': Representation(0, 31)
   })
 
 class CoverDriverLowRegister(Register):
@@ -837,7 +855,7 @@ class CoverDriverLowRegister(Register):
     # 31:0 (Default:0x00000000)
     # Lower configuration bits of SPI response received from the motor driver
     # connected to the SPI output.
-    'COVER_DRV_LOW': mask(0, 31)
+    'COVER_DRV_LOW': Representation(0, 31)
   })
 
 class ResetClockAndGatingRegister(Register):
@@ -846,11 +864,11 @@ class ResetClockAndGatingRegister(Register):
     # RW. Bit 2:0.
     #   0 Clock gating is not activated.
     #   7 Clock gating is activated.
-    'CLK_GATING_REG': mask(0, 2),
+    'CLK_GATING_REG': Representation(0, 2),
     # Bits 31:8.
     #  0 No reset is activated.
     #  0x525354 Internal reset is activated.
-    'RESET_REG': mask(8, 31)
+    'RESET_REG': Representation(8, 31)
   })
 
 # TODO finish this

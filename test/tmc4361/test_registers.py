@@ -1,12 +1,15 @@
 import unittest
 from RaspberryPiStepperDriver.activators.tmc4361.registers import mask, Representation, \
-  StatusEventRegister, SpiStatusSelectionRegister, ExternalClockFrequencyRegister, VMaxRegister
+  StatusFlagRegister, StatusEventRegister, SpiStatusSelectionRegister, ExternalClockFrequencyRegister, VMaxRegister
 
 class TestRegisters(unittest.TestCase):
   def test_1(self):
     register = StatusEventRegister(0b10)
     events = register.get_values()
     self.assertEqual(events[0][1], StatusEventRegister.bits.POS_COMP_REACHED)
+
+  def test_mask(self):
+    self.assertEqual(mask(7,7), 0b10000000)
 
   def test_SpiStatusSelectionRegister_defaults(self):
     register = SpiStatusSelectionRegister()
@@ -42,18 +45,22 @@ class TestRegisters(unittest.TestCase):
 
   def test_representation_set(self):
     num = 44.443355
-    rep = Representation(24, 8)
-    register = VMaxRegister().set(VMaxRegister.bits.VMAX, num, representation=rep)
+    # rep = Representation(0, 0, 24, 8)
+    register = VMaxRegister().set(VMaxRegister.bits.VMAX, num)
     self.assertEqual(register.data, 11377)
 
   def test_representation_roundtrip(self):
     num = 44.443355
-    rep = Representation(24, 8)
-    register = VMaxRegister().set(VMaxRegister.bits.VMAX, num, representation=rep)
+    # rep = Representation(0, 0, 24, 8)
+    register = VMaxRegister().set(VMaxRegister.bits.VMAX, num)
     self.assertEqual(register.data, 11377)
-    value = register.get(VMaxRegister.bits.VMAX, representation=rep)
+    value = register.get(VMaxRegister.bits.VMAX)
     # Note: fixed to floating point conversion is inexact
     self.assertEqual(value, 44.44140625)
+
+  def test_get_status_flags(self):
+    values = StatusFlagRegister(0b1).get_values()
+    self.assertTrue('TARGET_REACHED_F' in [t[0] for t in values])
 
 if __name__ == '__main__':
   unittest.main()
