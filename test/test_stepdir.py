@@ -1,4 +1,6 @@
-from RaspberryPiStepperDriver.deprecated.stepdir import *
+import asyncio
+from RaspberryPiStepperDriver.activators.stepdir import StepDirActivator
+import RPi.GPIO as GPIO
 
 motor_steps = 200
 dir_pin = 8
@@ -7,8 +9,7 @@ enable_pin = 7
 
 GPIO.cleanup()
 
-stepper = StepperDriver(motor_steps, dir_pin, step_pin, enable_pin,
-                        microsteps=1, rpm=60)
+stepper = StepDirActivator(dir_pin, step_pin, enable_pin)
 stepper.enable()
 
 async def run():
