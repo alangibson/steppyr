@@ -1,0 +1,8 @@
+#!/bin/sh -e
+
+export PYTHONPATH=$PWD/src
+
+if [[ -x gpio ]]; then
+  gpio mode 7 clock
+  gpio clock 7 1600000
+fi
