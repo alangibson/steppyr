@@ -23,14 +23,18 @@ driver = StepperDriver(
 
 driver.start()
 driver.set_microsteps(1)
+# driver.set_target_speed(100)
+# driver.set_acceleration(10)
+driver.profile.set_ramp_trapezoid(v_max=100, a_max=10, d_max=10)
+#driver.profile.set_ramp_scurve(
+#  v_max=10000, a_max=100*10, d_max=100*10,
+#  bow1, bow2, bow3, bow4,
+#  a_start=0, d_final=0, v_start=0, v_stop=0)
 driver.profile.set_motor_steps_per_rev(200)
 driver.profile.tmc26x.set_current(1000)
 
-driver.set_target_speed(100)
-driver.set_acceleration(10)
-# driver.profile.et
-
-driver.move_to(10000)
+driver.move_to(1000)
+driver.move_to(-1000)
 
 async def report(driver):
   print('Report loop starting')
@@ -46,6 +50,7 @@ async def report(driver):
     print('    acceleration', driver.profile.acceleration)
     print('    target_acceleration', driver.profile.target_acceleration)
     print('    target_deceleration', driver.profile.target_deceleration)
+    print('    microsteps', driver.profile.microsteps)
     await asyncio.sleep(1)
   print('Reporting done')
 
