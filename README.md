@@ -34,10 +34,10 @@ For a TMC26X driver, first make sure you have spidev installed:
 
 TMC26X example code:
 
-    from RaspberryPiStepperDriver.accelstepper import AccelStepper
-    from RaspberryPiStepperDriver.activators.spi import SPI
-    from RaspberryPiStepperDriver.activators.tmc26x import TMC26XActivator
-    from RaspberryPiStepperDriver.profiles.rectangle import RectangleProfile
+    from steppyr.accelstepper import AccelStepper
+    from steppyr.activators.spi import SPI
+    from steppyr.activators.tmc26x import TMC26XActivator
+    from steppyr.profiles.rectangle import RectangleProfile
 
     # Create the stepper driver
     stepper = AccelStepper(
@@ -55,9 +55,9 @@ TMC26X example code:
 
 TMC4361 example code:
 
-    from RaspberryPiStepperDriver.drivers import StepperDriver
-    from RaspberryPiStepperDriver.activators.tmc4361.driver import TMC4361
-    from RaspberryPiStepperDriver.activators.tmc4361.spi import SPI
+    from steppyr.drivers import StepperDriver
+    from steppyr.activators.tmc4361.driver import TMC4361
+    from steppyr.activators.tmc4361.spi import SPI
 
     spi = SPI(bus=0, device=1)
     tmc4361 = TMC4361(

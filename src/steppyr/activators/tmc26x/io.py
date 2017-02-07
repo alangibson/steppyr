@@ -1,4 +1,4 @@
-from RaspberryPiStepperDriver import datagram_to_int, clear_bit, _BV
+from steppyr import datagram_to_int, clear_bit, _BV
 
 class Datagram:
 

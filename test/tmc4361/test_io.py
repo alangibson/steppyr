@@ -1,6 +1,6 @@
 import unittest
-from RaspberryPiStepperDriver.activators.tmc4361.io import Status, Datagram
-from RaspberryPiStepperDriver.activators.tmc4361.registers import \
+from steppyr.activators.tmc4361.io import Status, Datagram
+from steppyr.activators.tmc4361.registers import \
   StatusEventRegister, SpiStatusSelectionRegister
 
 class TestIo(unittest.TestCase):

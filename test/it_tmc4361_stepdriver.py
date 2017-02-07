@@ -1,8 +1,8 @@
 import asyncio, logging, time
 import RPi.GPIO as GPIO
-from RaspberryPiStepperDriver.drivers import StepperDriver
-from RaspberryPiStepperDriver.activators.tmc4361.driver import TMC4361
-from RaspberryPiStepperDriver.activators.tmc4361.spi import SPI
+from steppyr.drivers import StepperDriver
+from steppyr.activators.tmc4361.driver import TMC4361
+from steppyr.activators.tmc4361.spi import SPI
 """
 Demonstrates integration between TCM4361 and StepperDriver.
 """

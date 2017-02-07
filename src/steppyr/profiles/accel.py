@@ -1,4 +1,4 @@
-from RaspberryPiStepperDriver import DIRECTION_CW, DIRECTION_CCW, micros
+from steppyr import DIRECTION_CW, DIRECTION_CCW, micros
 from . import RampProfile, calc_speed_from_step_interval
 import logging, math
 

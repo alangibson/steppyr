@@ -1,9 +1,9 @@
 import logging
 import spidev
-from RaspberryPiStepperDriver import tobin, set_bit, unset_bit
-from RaspberryPiStepperDriver.activators.tmc4361 import registers
-from RaspberryPiStepperDriver.activators import spi as activator_spi
-from RaspberryPiStepperDriver.activators.tmc4361.registers import CoverLowRegister
+from steppyr import tobin, set_bit, unset_bit
+from steppyr.activators.tmc4361 import registers
+from steppyr.activators import spi as activator_spi
+from steppyr.activators.tmc4361.registers import CoverLowRegister
 
 
 log = logging.getLogger(__name__)

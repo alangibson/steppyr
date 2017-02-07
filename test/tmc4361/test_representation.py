@@ -1,5 +1,5 @@
 import unittest
-from RaspberryPiStepperDriver.activators.tmc4361.registers import mask, Representation
+from steppyr.activators.tmc4361.registers import mask, Representation
 
 class TestRepresentation(unittest.TestCase):
 

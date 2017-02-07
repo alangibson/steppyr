@@ -1,4 +1,4 @@
-from RaspberryPiStepperDriver import mask, _BV, set_bit, unset_bit, lsb, get_bits
+from steppyr import mask, _BV, set_bit, unset_bit, lsb, get_bits
 from .io import Datagram
 
 # definitions for the driver control (DRVCTRL) register

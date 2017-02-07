@@ -1,4 +1,4 @@
-from RaspberryPiStepperDriver.profiles.accel import *
+from steppyr.profiles.accel import *
 
 def test_set_target_speed():
   # Given

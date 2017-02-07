@@ -1,4 +1,4 @@
-from RaspberryPiStepperDriver.deprecated.stepdir import *
+from steppyr.deprecated.stepdir import *
 
 motor_steps = 200
 dir_pin = 8

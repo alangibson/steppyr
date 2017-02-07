@@ -1,4 +1,4 @@
-from RaspberryPiStepperDriver.profiles.max import *
+from steppyr.profiles.max import *
 
 def test_constrain():
   assert(constrain(999, 10, 100) == 100)

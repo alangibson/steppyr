@@ -1,4 +1,4 @@
-from RaspberryPiStepperDriver.deprecated import drv8825
+from steppyr.deprecated import drv8825
 import RPi.GPIO as GPIO
 
 GPIO.DEBUG = True

@@ -1,7 +1,7 @@
 import asyncio, logging, time
-from RaspberryPiStepperDriver import drivers
-from RaspberryPiStepperDriver.profiles import accel
-from RaspberryPiStepperDriver.activators.stepdir import StepDirActivator
+from steppyr import drivers
+from steppyr.profiles import accel
+from steppyr.activators.stepdir import StepDirActivator
 
 logging.basicConfig(level=logging.DEBUG)
 

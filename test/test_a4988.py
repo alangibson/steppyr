@@ -1,4 +1,4 @@
-from RaspberryPiStepperDriver.deprecated import a4988
+from steppyr.deprecated import a4988
 import RPi.GPIO as GPIO
 
 GPIO.DEBUG = True

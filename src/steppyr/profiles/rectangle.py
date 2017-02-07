@@ -1,4 +1,4 @@
-from RaspberryPiStepperDriver import micros
+from steppyr import micros
 from . import RampProfile, calc_step_interval_us, calc_speed_from_step_interval, calc_direction
 
 """

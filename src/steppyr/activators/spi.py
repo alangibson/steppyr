@@ -1,6 +1,6 @@
 import logging
 import spidev
-from RaspberryPiStepperDriver import tobin, set_bit, unset_bit
+from steppyr import tobin, set_bit, unset_bit
 
 log = logging.getLogger(__name__)
 

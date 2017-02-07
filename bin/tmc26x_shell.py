@@ -1,9 +1,9 @@
 import asyncio, logging
-from RaspberryPiStepperDriver import drivers
-from RaspberryPiStepperDriver.activators import spi, tmc26x
-from RaspberryPiStepperDriver.profiles import accel as accel_profile, max as max_profile, rectangle as rectangle_profile
-from RaspberryPiStepperDriver.motion.tmc4361.driver import TMC4361
-from RaspberryPiStepperDriver.motion.tmc4361.spi import SPI as TMC4361SPI
+from steppyr import drivers
+from steppyr.activators import spi, tmc26x
+from steppyr.profiles import accel as accel_profile, max as max_profile, rectangle as rectangle_profile
+from steppyr.motion.tmc4361.driver import TMC4361
+from steppyr.motion.tmc4361.spi import SPI as TMC4361SPI
 
 logging.basicConfig(level=logging.DEBUG)
 log = logging.getLogger(__name__)

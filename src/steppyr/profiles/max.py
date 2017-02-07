@@ -1,5 +1,5 @@
 import logging
-from RaspberryPiStepperDriver import DIRECTION_CW, DIRECTION_CCW, DIRECTION_NONE, micros
+from steppyr import DIRECTION_CW, DIRECTION_CCW, DIRECTION_NONE, micros
 from . import RampProfile, calc_direction, calc_step_interval_us
 
 log = logging.getLogger(__name__)

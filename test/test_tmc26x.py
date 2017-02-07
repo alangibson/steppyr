@@ -1,7 +1,7 @@
-from RaspberryPiStepperDriver.drivers import StepperDriver
-from RaspberryPiStepperDriver.activators.spi import SPI
-from RaspberryPiStepperDriver.activators import tmc26x
-from RaspberryPiStepperDriver.profiles.rectangle import RectangleProfile
+from steppyr.drivers import StepperDriver
+from steppyr.activators.spi import SPI
+from steppyr.activators import tmc26x
+from steppyr.profiles.rectangle import RectangleProfile
 
 def init():
   try:

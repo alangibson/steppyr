@@ -1,6 +1,6 @@
 import logging, unittest
-from RaspberryPiStepperDriver.activators.tmc26x.spi import SPI
-from RaspberryPiStepperDriver.activators.tmc26x import TMC26XActivator
+from steppyr.activators.tmc26x.spi import SPI
+from steppyr.activators.tmc26x import TMC26XActivator
 
 logging.basicConfig(level=logging.DEBUG)
 log = logging.getLogger(__name__)

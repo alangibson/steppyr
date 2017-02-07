@@ -1,5 +1,5 @@
 import asyncio, logging
-from RaspberryPiStepperDriver import DIRECTION_CW, DIRECTION_CCW, micros
+from steppyr import DIRECTION_CW, DIRECTION_CCW, micros
 
 log = logging.getLogger(__name__)
 

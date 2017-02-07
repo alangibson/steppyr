@@ -1,4 +1,4 @@
-from RaspberryPiStepperDriver.profiles import *
+from steppyr.profiles import *
 
 def test_calc_speed_from_rpm():
   # Given

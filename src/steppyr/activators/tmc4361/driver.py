@@ -1,10 +1,10 @@
 import logging
 import RPi.GPIO as GPIO
-from RaspberryPiStepperDriver import sleep_microseconds, tobin, set_bit, unset_bit, datagram_to_int, _BV
-from RaspberryPiStepperDriver.activators.tmc4361.registers import *
-from RaspberryPiStepperDriver.activators.tmc26x import registers as tmc26x_registers, TMC26XActivator
-from RaspberryPiStepperDriver.activators.tmc4361.spi import TMC26xCoverSPI
-from RaspberryPiStepperDriver.lib.trinamic import MICROSTEP_RESOLUTION
+from steppyr import sleep_microseconds, tobin, set_bit, unset_bit, datagram_to_int, _BV
+from steppyr.activators.tmc4361.registers import *
+from steppyr.activators.tmc26x import registers as tmc26x_registers, TMC26XActivator
+from steppyr.activators.tmc4361.spi import TMC26xCoverSPI
+from steppyr.lib.trinamic import MICROSTEP_RESOLUTION
 
 log = logging.getLogger(__name__)
 

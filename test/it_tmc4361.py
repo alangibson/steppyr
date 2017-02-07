@@ -1,8 +1,8 @@
 import logging
 import RPi.GPIO as GPIO
-from RaspberryPiStepperDriver import sleep_microseconds
-from RaspberryPiStepperDriver.motion.tmc4361 import driver as drv
-from RaspberryPiStepperDriver.motion.tmc4361.spi import SPI
+from steppyr import sleep_microseconds
+from steppyr.motion.tmc4361 import driver as drv
+from steppyr.motion.tmc4361.spi import SPI
 
 logging.basicConfig(level=logging.DEBUG)
 
