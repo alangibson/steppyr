@@ -75,7 +75,8 @@ For all other STEP/DIR drivers.
 
 ## Testing
 
-  ./test/test.sh
+  source test/env
+  python3 -m unittest discover
 
 ## Wiring
 

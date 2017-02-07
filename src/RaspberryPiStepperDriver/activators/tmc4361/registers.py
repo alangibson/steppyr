@@ -25,12 +25,6 @@ def decode_twos_complement(input_value, num_bits):
 number_to_fixed = lambda float_value, fractional_bits: int(float_value * (1 << fractional_bits))
 fixed_to_number = lambda fixed_value, fractional_bits: fixed_value * (2**-fractional_bits)
 
-def unpack_bitmask_dict(bitmask_dict):
-  if type(bitmask_dict) == dict:
-    return (bitmask_dict['bitmask'], bitmask_dict['format'])
-  else:
-    return (bitmask_dict, None)
-
 class AttributeDict(dict):
   __getattr__ = dict.__getitem__
   __setattr__ = dict.__setitem__
@@ -50,6 +44,10 @@ class Representation:
     https://ucexperiment.wordpress.com/2012/10/28/fixed-point-math-on-the-arduino-platform/
   """
   def __init__(self, first_bit, last_bit=None, whole_bits=None, fractional_bits=0, signed=False):
+    """
+    first_bit: lsb
+    last_bit: msb
+    """
     self._first_bit = first_bit
     if last_bit == None:
       # When last_bit == None, we are acting like _BV
@@ -80,8 +78,11 @@ class Representation:
   def from_register_value(self, register_value):
     # Apply bitmask to extract bits from encoded register value
     value = get_bits(register_value, self.bitmask)
+    # FIXME handle case where self._last_bit > whole_bits + fractional_bits
+    # test case: test_mismatch
     # Handle signed
-    value = decode_twos_complement(value, self._whole_bits + self._fractional_bits)
+    if self._signed:
+      value = decode_twos_complement(value, self._whole_bits + self._fractional_bits)
     # Convert fixed point to floating point or int
     return fixed_to_number(value, self._fractional_bits)
 
@@ -186,8 +187,6 @@ TMC4361_POSITION_COMPARE_REGISTER = 0x32
 TMC4361_VIRTUAL_STOP_LEFT_REGISTER = 0x33
 TMC4361_VIRTUAL_STOP_RIGHT_REGISTER = 0x34
 TMC4361_X_LATCH_REGISTER = 0x36
-# RW. Target position; signed; 32 bits.
-TMC4361_X_TARGET_REGISTER = 0x37
 TMC4361_X_TARGET_PIPE_0_REGSISTER = 0x38
 # Shadow Register
 #   Some applications require a complete new ramp parameter set for a specific ramp
@@ -227,30 +226,37 @@ class VActualRegister(Register):
   REGISTER = 0x22
   bits = AttributeDict({
     # R. Current step velocity; 24 bits; signed; no decimals.
-    # Bit 31:0: Actual ramp generator velocity [pulses per second]:
+    # R. Bit 31:0: Actual ramp generator velocity [pulses per second]:
     #   1 pps ≤ |VACTUAL| ≤ CLK_FREQ · 1/2 pulses (fCLK = 16 MHz -> 8 Mpps)
-    'VACTUAL': Representation(0, 31, 24, 0, True)
+    # TODO actually Representation(0, 31, 24, 0, True). Representation needs bug fix
+    'VACTUAL': Representation(0, 23, 24, 0, True)
   })
 class AActualRegister(Register):
   REGISTER = 0x23
   bits = AttributeDict({
     # R. 31:0 AACTUAL (Default: 0x00000000)
     # Current step acceleration; 24 bits; signed; no decimals.
-    'AACTUAL': Representation(0, 31, 24, 0, True)
+    # TODO actually Representation(0, 31, 24, 0, True). Representation needs bug fix
+    'AACTUAL': Representation(0, 23, 24, 0, True)
   })
 class VMaxRegister(Register):
   REGISTER = 0x24
   bits = AttributeDict({
     # RW 31:0 VMAX (Default: 0x00000000)
+    # Defined as pulses per second [pps].
     # Maximum ramp generator velocity in positioning mode or
     # Target ramp generator velocity in velocity mode and no ramp motion profile.
-    # Value representation: signed; 32 bits= 24+8 (24 bits integer part, 8 bits decimal places).
+    # Value representation: signed; 32 bits = 24+8 (24 bits integer part, 8 bits decimal places).
+    # The maximum velocity VMAX is restricted as follows:
+    #   Velocity mode: |VMAX| ≤ ½ pulse · fCLK
+    #   Positioning mode: |VMAX| ≤ ¼ pulse · fCLK
     'VMAX': Representation(0, 31, 24, 8, True)
   })
 class VStartRegister(Register):
   REGISTER = 0x25
   bits = AttributeDict({
     # RW 30:0 VSTART (Default: 0x00000000)
+    # Defined as pulses per second [pps].
     # Absolute start velocity in positioning mode and velocity mode
     # In case VSTART is used: no first bow phase B1 for S-shaped ramps
     # VSTART in positioning mode:
@@ -266,6 +272,7 @@ class VStopRegister(Register):
   REGISTER = 0x26
   bits = AttributeDict({
     # RW 30:0 VSTOP (Default:0x00000000)
+    # Defined as pulses per second [pps].
     # Absolute stop velocity in positioning mode and velocity mode.
     # In case VSTOP is used: no last bow phase B4 for S-shaped ramps.
     # In case VSTOP is very small and positioning mode is used, it is possible that the
@@ -281,6 +288,7 @@ class VBreakRegister(Register):
   REGISTER = 0x27
   bits = AttributeDict({
     # RW 30:0 VBREAK (Default:0x00000000)
+    # Defined as pulses per second [pps].
     # Absolute break velocity in positioning mode and in velocity mode,
     # This only applies for trapezoidal ramp motion profiles.
     # In case VBREAK = 0: pure linear ramps are generated with AMAX / DMAX only.
@@ -305,6 +313,14 @@ class AMaxRegister(Register):
     #     a[∆v per clk_cycle]= AMAX / 237
     #     AMAX [pps2] = AMAX / 237 • fCLK2
     'AMAX': Representation(0, 23, 22, 2, False)
+  })
+class XTargetRegister(Register):
+  REGISTER = 0x37
+  bits = AttributeDict({
+    # RW 31:0 X_TARGET (Default: 0x00000000)
+    # Target motor position in positioning mode
+    #  signed; 32 bits.
+    'XTARGET': Representation(0, 31, 32, 0, True)
   })
 class DMaxRegister(Register):
   REGISTER = 0x29
@@ -619,6 +635,8 @@ class ExternalClockFrequencyRegister(Register):
   REGISTER = 0x31
   bits = AttributeDict({
     # RW. External clock frequency fCLK; unsigned; 25 bits.
+    # Set to proper Hz value which is defined by the external clock frequency
+    # fCLK. Any value between fCLK = 4.2 MHz and 32 MHz can be selected.
     'EXTERNAL_CLOCK_FREQUENCY': Representation(0, 24)
   })
 
