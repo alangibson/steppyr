@@ -1,6 +1,7 @@
 from .stepdir import StepDirActivator
+import RPi.GPIO as GPIO
 
-class A4988Activator(StepDirActivator)
+class A4988Activator(StepDirActivator):
   """
   The A4988 provides a STEP/DIR interface and allows setting microstep
   resolution with the ms* pins.
