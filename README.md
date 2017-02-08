@@ -34,19 +34,13 @@ For a TMC26X driver, first make sure you have spidev installed:
 
 TMC26X example code:
 
-    from steppyr.accelstepper import AccelStepper
-    from steppyr.activators.spi import SPI
-    from steppyr.activators.tmc26x import TMC26XActivator
-    from steppyr.profiles.rectangle import RectangleProfile
-
     # Create the stepper driver
     stepper = AccelStepper(
       profile=RectangleProfile(),
       activator=TMC26XActivator(
         spi=SPI(bus=0, device=0),
         dir_pin=pinout.dir_pin,
-        step_pin=pinout.step_pin,
-        current=300
+        step_pin=pinout.step_pin
       )
     )
     stepper.set_target_speed(1000) # steps per second
@@ -54,10 +48,6 @@ TMC26X example code:
     # stepper.set_pulse_width(2) # microseconds
 
 TMC4361 example code:
-
-    from steppyr.drivers import StepperDriver
-    from steppyr.activators.tmc4361.driver import TMC4361
-    from steppyr.activators.tmc4361.spi import SPI
 
     spi = SPI(bus=0, device=1)
     tmc4361 = TMC4361(
@@ -71,7 +61,17 @@ TMC4361 example code:
 
 For all other STEP/DIR drivers.
 
-    TODO
+  driver = StepperDriver(
+    profile=AccelProfile(),
+    activator=A4988Activator(
+      dir_pin=1,
+      step_pin=2,
+      enable_pin=3,
+      ms1_pin=4,
+      ms2_pin=5,
+      ms3_pin=6
+    )
+  )
 
 ## Testing
 
