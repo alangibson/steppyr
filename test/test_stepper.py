@@ -1,4 +1,5 @@
-from steppyr.drivers import calc_degrees_to_steps
+from steppyr import calc_degrees_to_steps
+
 
 def test_calc_degrees_to_steps():
   # given

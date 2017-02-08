@@ -1,6 +1,7 @@
 import logging
 import RPi.GPIO as GPIO
-from .. import DIRECTION_CW, DIRECTION_CCW, sleep_microseconds
+from .. import DIRECTION_CW, DIRECTION_CCW
+from steppyr.lib.functions import sleep_microseconds
 from . import Activator
 
 log = logging.getLogger(__name__)

@@ -1,6 +1,8 @@
 import logging
 import RPi.GPIO as GPIO
-from steppyr import sleep_microseconds, tobin, set_bit, unset_bit, datagram_to_int, _BV
+from steppyr import tobin, set_bit, datagram_to_int, _BV
+from steppyr.lib.functions import sleep_microseconds
+from steppyr.lib.bits import unset_bit, set_bit, _BV, tobin, datagram_to_int
 from steppyr.activators.tmc4361.registers import *
 from steppyr.activators.tmc26x import registers as tmc26x_registers, TMC26XActivator
 from steppyr.activators.tmc4361.spi import TMC26xCoverSPI

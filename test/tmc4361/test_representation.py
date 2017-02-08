@@ -1,5 +1,7 @@
 import unittest
-from steppyr.activators.tmc4361.registers import mask, Representation
+from steppyr.activators.tmc4361.registers import Representation
+from steppyr.lib.bits import mask
+
 
 class TestRepresentation(unittest.TestCase):
 

@@ -1,6 +1,6 @@
 import asyncio, logging, time
 import RPi.GPIO as GPIO
-from steppyr.drivers import StepperDriver
+from steppyr import StepperDriver
 from steppyr.activators.tmc4361.driver import TMC4361
 from steppyr.activators.tmc4361.spi import SPI
 """
@@ -30,7 +30,7 @@ driver.profile.set_ramp_trapezoid(v_max=100, a_max=10, d_max=10)
 #  v_max=10000, a_max=100*10, d_max=100*10,
 #  bow1, bow2, bow3, bow4,
 #  a_start=0, d_final=0, v_start=0, v_stop=0)
-driver.profile.set_motor_steps_per_rev(200)
+driver.profile.set_full_steps_per_rev(200)
 driver.profile.tmc26x.set_current(1000)
 
 driver.move_to(1000)
@@ -45,9 +45,9 @@ async def report(driver):
     print('    current_speed', driver.profile.current_speed)
     print('    target_steps', driver.profile.target_steps)
     print('    current_steps', driver.profile.current_steps)
-    print('    distance_to_go', driver.profile.distance_to_go)
+    print('    distance_to_go', driver.profile.steps_to_go)
     print('    target_speed', driver.profile.target_speed)
-    print('    acceleration', driver.profile.acceleration)
+    print('    acceleration', driver.profile.current_acceleration)
     print('    target_acceleration', driver.profile.target_acceleration)
     print('    target_deceleration', driver.profile.target_deceleration)
     print('    microsteps', driver.profile.microsteps)

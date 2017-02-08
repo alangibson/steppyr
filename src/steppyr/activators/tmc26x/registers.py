@@ -1,4 +1,4 @@
-from steppyr import mask, _BV, set_bit, unset_bit, lsb, get_bits
+from steppyr.lib.bits import unset_bit, set_bit, get_bits, mask, _BV, lsb
 from .io import Datagram
 
 # definitions for the driver control (DRVCTRL) register

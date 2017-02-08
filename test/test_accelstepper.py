@@ -1,12 +1,13 @@
 import asyncio, logging, time
-from steppyr import drivers
+
+import steppyr
 from steppyr.profiles import accel
 from steppyr.activators.stepdir import StepDirActivator
 
 logging.basicConfig(level=logging.DEBUG)
 
 # def __init__(self, profile, dir_pin, step_pin, enable_pin=None, pin_mode=GPIO.BCM):
-stepper = drivers.StepperDriver(
+stepper = steppyr.StepperDriver(
   activator=StepDirActivator(999, 999, 999),
   profile=accel.AccelProfile()
 )
@@ -17,7 +18,7 @@ motor_max_rpm = 200
 
 # steps per second
 stepper.set_target_speed(motor_steps_per_rev * ( motor_max_rpm / 60 ) )
-stepper.set_acceleration(1000) # steps per second per second
+stepper.set_target_acceleration(1000) # steps per second per second
 # Pulse width is defined by the stepper driver. 1.9us for the TB6560
 stepper.set_pulse_width(2)
 
@@ -26,7 +27,7 @@ async def doit():
     while True:
         await asyncio.sleep(0)
         # If at the end of travel go to the other end
-        if stepper.distance_to_go == 0:
+        if stepper.steps_to_go == 0:
             stepper.move_to(-stepper.currentPosition)
         # stepper.run()
         await asyncio.sleep(0)

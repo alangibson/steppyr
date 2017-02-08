@@ -1,6 +1,7 @@
 import logging
 import spidev
-from steppyr import tobin, set_bit, unset_bit
+from steppyr import tobin, set_bit
+from steppyr.lib.bits import unset_bit, set_bit, tobin
 from steppyr.activators.tmc4361 import registers
 from steppyr.activators import spi as activator_spi
 from steppyr.activators.tmc4361.registers import CoverLowRegister

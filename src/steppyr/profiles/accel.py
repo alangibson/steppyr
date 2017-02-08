@@ -1,4 +1,5 @@
-from steppyr import DIRECTION_CW, DIRECTION_CCW, micros
+from steppyr import DIRECTION_CW, DIRECTION_CCW
+from steppyr.lib.functions import micros
 from . import RampProfile, calc_speed_from_step_interval
 import logging, math
 
@@ -41,37 +42,38 @@ class AccelProfile(RampProfile):
     # TODO can we move the following block into compute_new_speed() ?
     self._ramp_delay_min_us = 1000000.0 / speed
     if self._ramp_step_number > 0:
-      self._ramp_step_number = calc_ramp_step_number_16(self._current_speed, self._acceleration)
+      self._ramp_step_number = calc_ramp_step_number_16(self._current_speed, self._target_acceleration)
       self.compute_new_speed()
 
-  def set_acceleration(self, acceleration):
+  def set_target_acceleration(self, acceleration):
     """
     Sets acceleration value in steps per second per second and computes new speed.
     Arguments:
       acceleration (float). Acceleration in steps per second per second.
     """
-    if acceleration == 0.0 or self._acceleration == acceleration:
+    if acceleration == 0.0 or self._target_acceleration == acceleration:
       return
     # Recompute _ramp_step_number per Equation 17
-    self._ramp_step_number = calc_ramp_step_number_17(self._ramp_step_number, self._acceleration, acceleration)
+    self._ramp_step_number = calc_ramp_step_number_17(self._ramp_step_number, self._target_acceleration, acceleration)
     # New c0 per Equation 7, with correction per Equation 15
     self._ramp_delay_0_us = calc_ramp_delay_0(acceleration)
-    self._acceleration = acceleration
+    self._target_acceleration = acceleration
+    self._current_acceleration = acceleration
     self.compute_new_speed()
 
   def compute_new_speed(self):
     # Save distance to go
-    distanceTo = self.distance_to_go
-    # stepsToStop = int(((self._current_speed * self._current_speed) / (2.0 * self._acceleration))) # Equation 16
+    distanceTo = self.steps_to_go
+    # stepsToStop = int(((self._current_speed * self._current_speed) / (2.0 * self._target_acceleration))) # Equation 16
     # Get number of steps until stop per Equation 16
-    stepsToStop = int(calc_ramp_step_number_16(self._current_speed , self._acceleration))
+    stepsToStop = int(calc_ramp_step_number_16(self._current_speed , self._target_acceleration))
 
     if distanceTo == 0 and stepsToStop <= 1:
       # We are at the target and its time to stop
       # self._step_interval_us = 0
       # self._current_speed = 0.0
       # self._ramp_step_number = 0
-      self.set_current_position(0)
+      self.set_current_steps(0)
       return
 
     if distanceTo > 0:
@@ -118,12 +120,12 @@ class AccelProfile(RampProfile):
     self._current_speed = calc_speed_from_step_interval(self._ramp_delay_n_us)
 
     log.debug('Computed new speed. _direction=%s, _current_steps=%s, _target_steps=%s, distance_to_go=%s, _ramp_step_number=%s, _current_speed=%s, _step_interval_us=%s',
-      self._direction, self._current_steps,
-      self._target_steps, self.distance_to_go,
-      self._ramp_step_number, self._current_speed, self._step_interval_us)
+              self._direction, self._current_steps,
+              self._target_steps, self.steps_to_go,
+              self._ramp_step_number, self._current_speed, self._step_interval_us)
 
-  def set_current_position(self, position):
-    super().set_current_position(position)
+  def set_current_steps(self, position):
+    super().set_current_steps(position)
     self._ramp_step_number = 0
 
 def calc_ramp_step_number_16(current_speed, acceleration):

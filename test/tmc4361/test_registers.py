@@ -1,6 +1,8 @@
 import unittest
-from steppyr.activators.tmc4361.registers import mask, Representation, \
+from steppyr.activators.tmc4361.registers import Representation, \
   StatusFlagRegister, StatusEventRegister, SpiStatusSelectionRegister, ExternalClockFrequencyRegister, VMaxRegister
+from steppyr.lib.bits import mask
+
 
 class TestRegisters(unittest.TestCase):
   def test_1(self):

@@ -1,4 +1,4 @@
-from steppyr.drivers import StepperDriver
+from steppyr import StepperDriver
 from steppyr.activators.spi import SPI
 from steppyr.activators import tmc26x
 from steppyr.profiles.rectangle import RectangleProfile
@@ -57,9 +57,9 @@ def test_dump():
   print('  stall_guard2_current_register_value ', tmc26x.tobin(driver.activator.stall_guard2_current_register_value, 20))
   print('  driver_configuration_register_value ', tmc26x.tobin(driver.activator.driver_configuration_register_value, 20))
 
-  print('steps left', driver.distance_to_go)
+  print('steps left', driver.steps_to_go)
   driver.step(100)
-  print('steps left', driver.distance_to_go)
+  print('steps left', driver.steps_to_go)
 
 def test_get_current():
   spi_dev, driver = init()

@@ -1,9 +1,9 @@
 import logging
 import RPi.GPIO as GPIO
-from steppyr import tobin, set_bit, unset_bit, constrain
-from .registers import *
-from steppyr.activators.stepdir import StepDirActivator
+from steppyr.lib.functions import constrain
 from steppyr.lib.trinamic import MICROSTEP_RESOLUTION
+from steppyr.activators.stepdir import StepDirActivator
+from steppyr.activators.tmc26x.registers import *
 
 """
 Ported to Python from https://github.com/trinamic/TMC26XStepper

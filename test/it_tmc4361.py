@@ -1,6 +1,6 @@
 import logging
 import RPi.GPIO as GPIO
-from steppyr import sleep_microseconds
+from steppyr.lib.functions import sleep_microseconds
 from steppyr.motion.tmc4361 import driver as drv
 from steppyr.motion.tmc4361.spi import SPI
 

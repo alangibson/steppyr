@@ -1,5 +1,6 @@
 import logging
-from .. import DIRECTION_CW, DIRECTION_CCW, DIRECTION_NONE, micros
+from .. import DIRECTION_CW, DIRECTION_CCW, DIRECTION_NONE
+from steppyr.lib.functions import micros
 
 log = logging.getLogger(__name__)
 
@@ -21,15 +22,17 @@ class RampProfile:
     # Last requested absolute target position in steps
     self._target_steps = 0
     # Previously set _target_steps. Used in calculating ramps
-    self._previous_target_steps = 0
+    self._previous_target_position = 0
     # Acceleration in steps per second per second
     # Defaults to 1.0 to avoid divide by zero errors
-    self._acceleration = 1.0
+    self._target_acceleration = 1.0
+    # Our current acceleration in steps / second / second
+    self._current_acceleration = 0.0
     # Microstep denominator ( 1/_microsteps )
     self._microsteps = 1
     # Number of full steps for motor to turn one revolution
     # This default is for a 1.8 degree stepper
-    self._motor_steps_per_rev = 200
+    self._full_steps_per_rev = 200
     # Time in microseconds that last step occured
     self._last_step_time_us = 0
     self._next_step_time_us = None
@@ -44,9 +47,15 @@ class RampProfile:
     if self._target_speed == speed:
       return
     self._target_speed = speed
-    log.debug('Set speed %s _step_interval_us %s _direction %s',
-      speed, self._step_interval_us, self._direction )
     self.compute_new_speed()
+
+  @property
+  def target_speed(self):
+    return self._target_speed
+
+  @property
+  def current_speed(self):
+    return self._current_speed
 
   def set_target_rpm(self, rpm):
     """
@@ -56,34 +65,38 @@ class RampProfile:
       rpm (float): Desired revolutions per minute for motor.
       steps_per_rev: number of full steps per revolution of motor.
     """
-    self.set_target_speed(calc_speed_from_rpm(rpm, steps_per_rev, self._microsteps))
+    self.set_target_speed(calc_speed_from_rpm(rpm, self._full_steps_per_rev, self._microsteps))
 
   def set_target_steps(self, absolute_steps):
     if self._target_steps != absolute_steps:
-      self._previous_target_steps = self._target_steps
+      self._previous_target_position = self._target_steps
       self._target_steps = absolute_steps
       self.compute_new_speed()
 
-  def set_acceleration(self, acceleration):
+  def set_target_acceleration(self, acceleration):
     """
     Sets acceleration value in steps per second per second and computes new speed.
 
     Arguments:
       acceleration (float). Acceleration in steps per second per second.
     """
-    self._acceleration = acceleration
+    self._target_acceleration = acceleration
     self.compute_new_speed()
 
   @property
-  def acceleration(self):
-    return self._acceleration
-
-  def set_motor_steps_per_rev(self, steps_per_rev):
-    self._motor_steps_per_rev = steps_per_rev
+  def target_acceleration(self):
+    return self._target_acceleration
 
   @property
-  def motor_steps_per_rev(self):
-    return self._motor_steps_per_rev
+  def current_acceleration(self):
+    return self._current_acceleration
+
+  def set_full_steps_per_rev(self, steps_per_rev):
+    self._full_steps_per_rev = steps_per_rev
+
+  @property
+  def full_steps_per_rev(self):
+    return self._full_steps_per_rev
 
   # FIXME compute _next_step_time_us
   def compute_new_speed(self):
@@ -95,7 +108,7 @@ class RampProfile:
     """
     pass
 
-  def set_current_position(self, position):
+  def set_current_steps(self, position):
     """
     Useful during initialisation or after initial positioning.
     """
@@ -133,12 +146,12 @@ class RampProfile:
     """
     Returns true if we should take a step.
     """
-    if not self.step_interval_us or not self.distance_to_go:
+    if not self.step_interval_us or not self.steps_to_go:
       return False
     return (self._next_step_time_us and micros() >= self._next_step_time_us)
 
   @property
-  def distance_to_go(self):
+  def steps_to_go(self):
     """
     # +ve is clockwise from curent location
     """
@@ -150,7 +163,7 @@ class RampProfile:
 
   @property
   def is_moving(self):
-    return self.distance_to_go != 0
+    return self.steps_to_go != 0
 
   @property
   def direction(self):
@@ -158,7 +171,7 @@ class RampProfile:
     Calculates direction based on distance to go
     """
     # return DIRECTION_CW if self.distance_to_go > 0 else DIRECTION_CCW
-    return calc_direction(self.distance_to_go)
+    return calc_direction(self.steps_to_go)
 
   @property
   def step_interval_us(self):
@@ -183,7 +196,7 @@ def calc_direction(value):
   else:
     return DIRECTION_NONE
 
-def calc_speed_from_rpm(rpm, steps_per_rev, microsteps):
+def calc_speed_from_rpm(rpm, full_steps_per_rev, microsteps):
   """
   Calculates speed in steps per second from revolutions per minute.
 
@@ -192,7 +205,7 @@ def calc_speed_from_rpm(rpm, steps_per_rev, microsteps):
   microsteps: number of microsteps.
   """
   rps = rpm / 60
-  microsteps_per_rev = steps_per_rev * microsteps
+  microsteps_per_rev = full_steps_per_rev * microsteps
   speed_steps_per_sec = rps * microsteps_per_rev
   return speed_steps_per_sec
 

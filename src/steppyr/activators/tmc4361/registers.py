@@ -1,8 +1,7 @@
 """
 registers for TMC4361
 """
-import functools
-from steppyr import set_bit, unset_bit, lsb, mask, _BV, get_bits
+from steppyr.lib.bits import unset_bit, set_bit, get_bits, mask, _BV, lsb
 from steppyr.activators.tmc4361.io import Datagram
 
 WRITE_MASK = 0x80 # register | WRITE_MASK

@@ -1,4 +1,4 @@
-from steppyr import datagram_to_int, clear_bit, _BV
+from steppyr.lib.bits import clear_bit, _BV, datagram_to_int
 
 WRITE_MASK = 0x80 # register | WRITE_MASK
 READ_MASK = 0x7F # register & READ_MASK
