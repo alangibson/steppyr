@@ -23,6 +23,8 @@ class TMC4361Driver(Driver):
     self._spi = spi
     self._reset_pin = reset_pin
     self._pin_mode = pin_mode
+    # Initialize TMC26x driver
+    self.tmc26x = TMC26XDriver(spi=TMC26xCoverSPI(self._spi), dir_pin=0, step_pin=0, current=300, resistor=150)
     # Initialize Registers
     self.spi_status_selection_register = SpiStatusSelectionRegister()
     self.general_configuration_register = GeneralConfigurationRegister()
@@ -588,8 +590,8 @@ class TMC4361Driver(Driver):
     )
     # Initialize TMC26x
     log.debug('Initializing TCM26x')
-    cover_spi = TMC26xCoverSPI(self._spi)
-    self.tmc26x = TMC26XDriver(spi=cover_spi, dir_pin=0, step_pin=0, current=300, resistor=150)
+    # cover_spi = TMC26xCoverSPI(self._spi)
+    # self.tmc26x = TMC26XDriver(spi=cover_spi, dir_pin=0, step_pin=0, current=300, resistor=150)
     self.tmc26x.activate()
 
   def disable_tmc26x(self):
