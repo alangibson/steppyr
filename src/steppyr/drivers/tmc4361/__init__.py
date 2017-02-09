@@ -10,6 +10,9 @@ from steppyr.lib.trinamic import MICROSTEP_RESOLUTION
 
 log = logging.getLogger(__name__)
 
+# Toggle calling of the report() function in should_step()
+REPORT = False
+
 CLOCK_FREQUENCY = 16000000
 
 # Defines ported to Python functions
@@ -100,6 +103,7 @@ class TMC4361Driver(Driver):
     self._spi.write(self.general_configuration_register
       .set(GeneralConfigurationRegister.bits.POL_DIR_OUT)
     )
+    self.flush_registers()
     # TODO ? self._spi.writeRegister(registers.TMC4361_SH_RAMP_MODE_REGISTER, RAMP_MODE_POSITIONING_MODE | RAMP_MODE_NO_RAMP)
     self._spi.write(self.external_clock_frequency_register)
     # TODO ? NEEDED so THAT THE SQUIRREL CAN RECOMPUTE EVERYTHING!
@@ -216,7 +220,7 @@ class TMC4361Driver(Driver):
     self._spi.write(self.motor_driver_settings_register
       .set(MotorDriverSettingsRegister.bits.FS_PER_REV, full_steps_per_rev) )
 
-  def set_current_position(self, position):
+  def set_current_steps(self, position):
     """
     Implements Profile.set_current_position(position) method.
     """
@@ -258,16 +262,17 @@ class TMC4361Driver(Driver):
     pass
 
   def should_step(self):
-    # Profile should keep calling step() while we are moving.
+    if REPORT:
+      self.report()
     return self.is_moving
 
   #
   # StepperController API methods
   #
 
-  def abort(self):
+  def stop(self):
     """
-    Implements StepperController.abort() method.
+    Implements StepperController.stop() method.
     """
     # TODO In order to stop the motion during positioning, do as follows:
     # Action: Set VMAX = 0 (register 0x24).
@@ -412,6 +417,11 @@ class TMC4361Driver(Driver):
     self.v_start_register.set(VStartRegister.bits.VSTART, v_start)
     self.v_stop_register.set(VStopRegister.bits.VSTOP, v_stop)
     self.flush_registers()
+    print('RAMP RAMP RAMP RAMP')
+    print('RAMP RAMP RAMP RAMP')
+    self.report()
+    print('RAMP RAMP RAMP RAMP')
+    print('RAMP RAMP RAMP RAMP')
 
   def set_ramp_sixpoint(self, v_max, v_break, a_start, a_max, d_max, d_final,
     motion_profile=1, operation_mode=1,
@@ -571,6 +581,23 @@ class TMC4361Driver(Driver):
       # FIXME soft reset doesnt seem to work
       self._spi.write(ResetClockAndGatingRegister()
         .set(ResetClockAndGatingRegister.bits.RESET_REG, 0x525354) )
+
+  def report(self):
+    """
+    Log a status report at DEBUG level.
+    """
+    # Profile should keep calling step() while we are moving.
+    log.debug('TMC4361Driver Status Report')
+    log.debug('    current_speed %s', self.current_speed)
+    log.debug('    target_position %s', self.target_steps)
+    log.debug('    current_position %s', self.current_steps)
+    log.debug('    target_speed %s', self.target_speed)
+    log.debug('    current_acceleration %s', self.current_acceleration)
+    log.debug('    target_acceleration %s', self.target_acceleration)
+    log.debug('    target_deceleration %s', self.target_deceleration)
+    # Probably not a good idea to constantly read this since it is cleared on read.
+    # log.debug('    get_status_events', self.get_status_events())
+    log.debug('    get_status_flags %s', self.get_status_flags())
 
   def enable_tmc26x(self):
     """
