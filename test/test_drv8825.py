@@ -1,13 +1,13 @@
 import unittest
 import RPi.GPIO as GPIO
-from steppyr.activators.drv8825 import DRV8825Activator
+from steppyr.drivers.drv8825 import DRV8825Driver
 
 GPIO.DEBUG = True
 
 class TestSuite(unittest.TestCase):
   def test(self):
-    activator = DRV8825Activator(dir_pin=1, step_pin=2,
-                                 ms1_pin=3, ms2_pin=4, ms3_pin=5)
+    activator = DRV8825Driver(dir_pin=1, step_pin=2,
+                              ms1_pin=3, ms2_pin=4, ms3_pin=5)
     activator.set_microsteps(0)
     activator.set_microsteps(1)
     activator.set_microsteps(2)

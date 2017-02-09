@@ -1,5 +1,5 @@
 import unittest
-from steppyr.activators.tmc4361.registers import Representation
+from steppyr.drivers.tmc4361.registers import Representation
 from steppyr.lib.bits import mask
 
 

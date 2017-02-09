@@ -1,15 +1,15 @@
 import asyncio, logging, time, unittest
 import steppyr
 from steppyr.profiles import accel
-from steppyr.activators.stepdir import StepDirActivator
+from steppyr.drivers.stepdir import StepDirDriver
 
 logging.basicConfig(level=logging.DEBUG)
 
 class TestSuite(unittest.TestCase):
   def test_1(self):
     # def __init__(self, profile, dir_pin, step_pin, enable_pin=None, pin_mode=GPIO.BCM):
-    stepper = steppyr.StepperDriver(
-      activator=StepDirActivator(999, 999, 999),
+    stepper = steppyr.StepperController(
+      driver=StepDirDriver(999, 999, 999),
       profile=accel.AccelProfile()
     )
     stepper.activate()

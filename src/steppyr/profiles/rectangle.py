@@ -31,7 +31,7 @@ class RectangleProfile(RampProfile):
     "
     if self.motor_steps and self.microsteps and self.rpm:
       self.step_pulse_us = 60 * 1000000 / self.motor_steps / self.microsteps / self.rpm
-      log.debug('base.StepperDriver calculated step pulse %s us, motor_steps %s, microsteps %s, rpm %s',
+      log.debug('base.StepperController calculated step pulse %s us, motor_steps %s, microsteps %s, rpm %s',
         self.step_pulse_us, self.motor_steps, self.microsteps, self.rpm)
       # We currently try to do a 50% duty cycle so it's easy to see.
       # Other option is step_high_min, pulse_duration-step_high_min.

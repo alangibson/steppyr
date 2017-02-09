@@ -37,7 +37,7 @@ TMC26X example code:
     # Create the stepper driver
     stepper = AccelStepper(
       profile=RectangleProfile(),
-      activator=TMC26XActivator(
+      activator=TMC26XDriver(
         spi=SPI(bus=0, device=0),
         dir_pin=pinout.dir_pin,
         step_pin=pinout.step_pin
@@ -54,16 +54,16 @@ TMC4361 example code:
       spi=spi,
       reset_pin=26
     )
-    driver = StepperDriver(
+    driver = StepperController(
       activator=tmc4361,
       profile=tmc4361
     )
 
 For all other STEP/DIR drivers.
 
-  driver = StepperDriver(
+  driver = StepperController(
     profile=AccelProfile(),
-    activator=A4988Activator(
+    activator=A4988Driver(
       dir_pin=1,
       step_pin=2,
       enable_pin=3,

@@ -1,9 +1,9 @@
 import logging
 import spidev
 from steppyr.lib.bits import unset_bit, set_bit, tobin
-from steppyr.activators.tmc4361 import registers
-from steppyr.activators import spi as activator_spi
-from steppyr.activators.tmc4361.registers import CoverLowRegister
+from steppyr.drivers.tmc4361 import registers
+from steppyr.drivers import spi as activator_spi
+from steppyr.drivers.tmc4361.registers import CoverLowRegister
 
 log = logging.getLogger(__name__)
 

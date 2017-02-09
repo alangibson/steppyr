@@ -1,8 +1,8 @@
-from .a4988 import A4988Activator
+from .a4988 import A4988Driver
 
-class DRV8825Activator(A4988Activator):
+class DRV8825Driver(A4988Driver):
   """
-  Activator class for Pololu DRV8825 stepper driver.
+  Driver class for Pololu DRV8825 stepper driver.
 
   https://www.pololu.com/file/download/drv8825.pdf
   """

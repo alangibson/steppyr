@@ -2,11 +2,11 @@ import logging
 import RPi.GPIO as GPIO
 from .. import DIRECTION_CW, DIRECTION_CCW
 from steppyr.lib.functions import sleep_microseconds
-from . import Activator
+from . import Driver
 
 log = logging.getLogger(__name__)
 
-class StepDirActivator(Activator):
+class StepDirDriver(Driver):
 
   def __init__(self, dir_pin, step_pin, enable_pin=None, pin_mode=GPIO.BCM):
     super().__init__(pin_mode=pin_mode)

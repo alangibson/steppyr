@@ -9,13 +9,13 @@ DIRECTION_CW  = 1   # Counter-Clockwise
 def calc_degrees_to_steps(degrees, motor_steps_per_rev, microsteps):
   return degrees * motor_steps_per_rev * microsteps / 360
 
-class StepperDriver:
+class StepperController:
   """
   This API is based on AccelStepper (http://www.airspayce.com/mikem/arduino/AccelStepper).
   """
 
-  def __init__(self, activator, profile):
-    self._activator = activator
+  def __init__(self, driver, profile):
+    self._driver = driver
     self._profile = profile
 
   def activate(self):
@@ -23,14 +23,14 @@ class StepperDriver:
     Must be called before using this driver.
     Implementing classes should use this method to initialize the hardware.
     """
-    self._activator.activate()
+    self._driver.activate()
 
   def shutdown(self):
     """
     Must be called when this driver is no longer needed.
     Implementing classes should use this method to deactivate the hardware.
     """
-    self._activator.shutdown()
+    self._driver.shutdown()
 
   def stop(self):
     """
@@ -87,7 +87,7 @@ class StepperDriver:
       # It is time to do a step
 
       # Tell the activator to take a step in a given direction
-      self._activator.step(self._profile.direction)
+      self._driver.step(self._profile.direction)
 
       # Tell profile we are taking a step
       self._profile.step()
@@ -104,21 +104,21 @@ class StepperDriver:
     while self._profile.is_moving:
       await asyncio.sleep(0)
 
-  def predict_steps_to_go(self, target_steps):
+  def next_steps_to_go(self, target_steps):
     """
     Convenience function for any code that may want to know how many steps we will go
     """
     return target_steps - self._profile.current_steps
 
-  def predict_direction(self, target_steps):
+  def next_direction(self, target_steps):
     """
     Convenience function for any code that may want to know what direction we would travel
     """
-    return DIRECTION_CW if self.predict_steps_to_go(target_steps) > 0 else DIRECTION_CCW
+    return DIRECTION_CW if self.next_steps_to_go(target_steps) > 0 else DIRECTION_CCW
 
   @property
   def activator(self):
-    return self._activator
+    return self._driver
 
   @property
   def profile(self):
@@ -129,10 +129,10 @@ class StepperDriver:
   #
 
   def step(self, direction):
-    self._activator.step(self._profile.direction)
+    self._driver.step(self._profile.direction)
 
   def set_microsteps(self, microsteps):
-    self._activator.set_microsteps(microsteps)
+    self._driver.set_microsteps(microsteps)
     self._profile.set_microsteps(microsteps)
 
   def set_target_speed(self, speed):
@@ -195,4 +195,4 @@ class StepperDriver:
     """
     Set the step pulse width in microseconds.
     """
-    self._activator.set_pulse_width(pulse_width_us)
+    self._driver.set_pulse_width(pulse_width_us)

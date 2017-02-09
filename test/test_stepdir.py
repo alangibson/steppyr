@@ -1,5 +1,5 @@
 import asyncio, unittest
-from steppyr.activators.stepdir import StepDirActivator
+from steppyr.drivers.stepdir import StepDirDriver
 import RPi.GPIO as GPIO
 
 class TestSuite(unittest.TestCase):
@@ -11,7 +11,7 @@ class TestSuite(unittest.TestCase):
 
     GPIO.cleanup()
 
-    stepper = StepDirActivator(dir_pin, step_pin, enable_pin)
+    stepper = StepDirDriver(dir_pin, step_pin, enable_pin)
     stepper.enable()
 
     async def run():

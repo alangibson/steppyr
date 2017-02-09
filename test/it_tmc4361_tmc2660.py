@@ -1,12 +1,12 @@
-from steppyr.activators.tmc4361 import *
-from steppyr.activators.tmc4361.spi import SPI as TMC4361SPI
+from steppyr.drivers.tmc4361 import *
+from steppyr.drivers.tmc4361.spi import SPI as TMC4361SPI
 
 # logging.config.fileConfig('logging.ini')
 logging.basicConfig(level=logging.INFO)
 log = logging.getLogger(__name__)
 
 spi1 = TMC4361SPI(bus=0, device=1)
-tmc4361 = TMC4361Activator(
+tmc4361 = TMC4361Driver(
   spi=spi1,
   reset_pin=26
 )

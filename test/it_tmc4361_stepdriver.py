@@ -1,10 +1,10 @@
 import asyncio, logging, time
 import RPi.GPIO as GPIO
-from steppyr import StepperDriver
-from steppyr.activators.tmc4361 import TMC4361Activator
-from steppyr.activators.tmc4361.spi import SPI
+from steppyr import StepperController
+from steppyr.drivers.tmc4361 import TMC4361Driver
+from steppyr.drivers.tmc4361.spi import SPI
 """
-Demonstrates integration between TCM4361 and StepperDriver.
+Demonstrates integration between TCM4361 and StepperController.
 """
 
 logging.basicConfig(level=logging.INFO)
@@ -12,12 +12,12 @@ logging.basicConfig(level=logging.INFO)
 loop = asyncio.get_event_loop()
 
 spi = SPI(bus=0, device=1)
-tmc4361 = TMC4361Activator(
+tmc4361 = TMC4361Driver(
   spi=spi,
   reset_pin=26
 )
-stepper = StepperDriver(
-  activator=tmc4361,
+stepper = StepperController(
+  driver=tmc4361,
   profile=tmc4361
 )
 

@@ -2,8 +2,8 @@ import logging
 import RPi.GPIO as GPIO
 from steppyr.lib.functions import constrain
 from steppyr.lib.trinamic import MICROSTEP_RESOLUTION
-from steppyr.activators.stepdir import StepDirActivator
-from steppyr.activators.tmc26x.registers import *
+from steppyr.drivers.stepdir import StepDirDriver
+from steppyr.drivers.tmc26x.registers import *
 
 """
 Ported to Python from https://github.com/trinamic/TMC26XStepper
@@ -95,7 +95,7 @@ CHOPPER_CONFIG_REGISTER = {
   'T_OFF_TIMING_PATERN': 0XF
   }
 
-class TMC26XActivator(StepDirActivator):
+class TMC26XDriver(StepDirDriver):
 
   def __init__(self, spi, dir_pin, step_pin, pin_mode=GPIO.BCM, current=300, resistor=150):
     """

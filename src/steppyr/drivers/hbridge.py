@@ -1,9 +1,9 @@
 import time
 import RPi.GPIO as GPIO
 from .. import DIRECTION_CW, DIRECTION_CCW
-from . import Activator
+from . import Driver
 
-class HBridgeActivator(Activator):
+class HBridgeDriver(Driver):
 
   forward_full_steps = [
     {in1_pin: GPIO.HIGH, in2_pin: GPIO.LOW, in3_pin: GPIO.LOW, in4_pin: GPIO.HIGH},

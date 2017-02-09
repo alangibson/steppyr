@@ -1,6 +1,6 @@
 import logging, unittest
-from steppyr.activators.tmc26x.spi import SPI
-from steppyr.activators.tmc26x import TMC26XActivator
+from steppyr.drivers.tmc26x.spi import SPI
+from steppyr.drivers.tmc26x import TMC26XDriver
 
 logging.basicConfig(level=logging.DEBUG)
 log = logging.getLogger(__name__)
@@ -9,7 +9,7 @@ class TestSuite(unittest.TestCase):
   def test_1(self):
     # Given
     spi_dev = SPI(None, None)
-    tmc26x = TMC26XActivator(spi=spi_dev, dir_pin=0, step_pin=0, current=300, resistor=150)
+    tmc26x = TMC26XDriver(spi=spi_dev, dir_pin=0, step_pin=0, current=300, resistor=150)
     # When
     tmc26x.activate()
     # Then

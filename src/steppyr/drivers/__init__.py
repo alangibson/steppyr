@@ -1,8 +1,8 @@
 import RPi.GPIO as GPIO
 
-class Activator:
+class Driver:
   """
-  Defines the Activator API.
+  Defines the Driver API.
   """
 
   def __init__(self, pin_mode=GPIO.BCM, microsteps=1):

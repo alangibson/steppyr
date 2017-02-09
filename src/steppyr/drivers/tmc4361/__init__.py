@@ -1,9 +1,9 @@
 import logging
 import RPi.GPIO as GPIO
-from steppyr.activators import Activator
-from steppyr.activators.tmc26x import TMC26XActivator
-from steppyr.activators.tmc4361.registers import *
-from steppyr.activators.tmc4361.spi import TMC26xCoverSPI
+from steppyr.drivers import Driver
+from steppyr.drivers.tmc26x import TMC26XDriver
+from steppyr.drivers.tmc4361.registers import *
+from steppyr.drivers.tmc4361.spi import TMC26xCoverSPI
 from steppyr.lib.bits import _BV
 from steppyr.lib.functions import sleep_microseconds
 from steppyr.lib.trinamic import MICROSTEP_RESOLUTION
@@ -17,7 +17,7 @@ CLOCK_FREQUENCY = 16000000
 FIXED_23_8_MAKE = lambda a: a * (1 << 8)
 FIXED_22_2_MAKE = lambda a: a * (1 << 2)
 
-class TMC4361Activator(Activator):
+class TMC4361Driver(Driver):
 
   def __init__(self, spi, reset_pin=None, pin_mode=GPIO.BCM):
     self._spi = spi
@@ -74,7 +74,7 @@ class TMC4361Activator(Activator):
     self._spi.write(self.status_event_register)
 
   #
-  # Activator API methods
+  # Driver API methods
   #
 
   def activate(self):
@@ -83,7 +83,7 @@ class TMC4361Activator(Activator):
     signal (START is an input), or START output indicates an active START event
     by switching from high to low level." Datasheet 9.1.3
 
-    Implements Activator.start() method.
+    Implements Driver.start() method.
     """
     GPIO.setmode(self._pin_mode)
     if self._reset_pin:
@@ -114,35 +114,35 @@ class TMC4361Activator(Activator):
 
   def shutdown(self):
     """
-    Implements Activator.stop() method.
+    Implements Driver.stop() method.
     """
     self.disable_tmc26x()
     self.reset(hard=True)
 
   def enable(self):
     """
-    Implements Activator.enable() method.
+    Implements Driver.enable() method.
     """
     # TODO implement
     pass
 
   def disable(self):
     """
-    Implements Activator.disable() method.
+    Implements Driver.disable() method.
     """
     # TODO implement
     pass
 
   def step(self, direction=None):
     """
-    Implements Activator.step(direction) method.
+    Implements Driver.step(direction) method.
     Implements Profile.step() method.
     """
     pass
 
   def set_microsteps(self, microsteps):
     """
-    Implements Activator.set_microsteps(microsteps) method.
+    Implements Driver.set_microsteps(microsteps) method.
     Implements Profile.set_microsteps(microsteps) method.
     """
     value = MICROSTEP_RESOLUTION[microsteps]
@@ -161,13 +161,13 @@ class TMC4361Activator(Activator):
   @property
   def pulse_width(self):
     """
-    Implements Activator.pulse_width method.
+    Implements Driver.pulse_width method.
     """
     return 0
 
   def set_pulse_width(self, pulse_width_us):
     """
-    Implements Activator.set_pulse_width(pulse_width_us) method.
+    Implements Driver.set_pulse_width(pulse_width_us) method.
     """
     pass
 
@@ -188,7 +188,7 @@ class TMC4361Activator(Activator):
   def set_target_steps(self, absolute_steps):
     """
     Implements Profile.set_target_steps(absolute_steps) method.
-    Acts like StepperDriver.move_to(position) method
+    Acts like StepperController.move_to(position) method
     """
     # FIXME We want an immediate start, so temporarily modify the start register.
     # oldStartRegister = self._spi.readRegister(registers.TMC4361_START_CONFIG_REGISTER)
@@ -260,12 +260,12 @@ class TMC4361Activator(Activator):
     return self.is_moving
 
   #
-  # StepperDriver API methods
+  # StepperController API methods
   #
 
   def abort(self):
     """
-    Implements StepperDriver.abort() method.
+    Implements StepperController.abort() method.
     """
     # TODO In order to stop the motion during positioning, do as follows:
     # Action: Set VMAX = 0 (register 0x24).
@@ -589,7 +589,7 @@ class TMC4361Activator(Activator):
     # Initialize TMC26x
     log.debug('Initializing TCM26x')
     cover_spi = TMC26xCoverSPI(self._spi)
-    self.tmc26x = TMC26XActivator(spi=cover_spi, dir_pin=0, step_pin=0, current=300, resistor=150)
+    self.tmc26x = TMC26XDriver(spi=cover_spi, dir_pin=0, step_pin=0, current=300, resistor=150)
     self.tmc26x.activate()
 
   def disable_tmc26x(self):
