@@ -11,7 +11,7 @@ class TestSuite(unittest.TestCase):
     spi_dev = SPI(None, None)
     tmc26x = TMC26XActivator(spi=spi_dev, dir_pin=0, step_pin=0, current=300, resistor=150)
     # When
-    tmc26x.start()
+    tmc26x.activate()
     # Then
     print('driver_control_register', tmc26x.driver_control_register.get_all_values())
     print('chopper_config_register', tmc26x.chopper_config_register.get_all_values())

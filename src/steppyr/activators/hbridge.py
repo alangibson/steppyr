@@ -29,7 +29,7 @@ class HBridgeActivator(Activator):
     self.steps_per_second = 600
     self.delay = 1.0 / self.steps_per_second / 4
 
-  def start(self):
+  def activate(self):
     GPIO.cleanup()
     GPIO.setmode(GPIO.BOARD)
     GPIO.setup(self.enable_pin, GPIO.OUT)
@@ -40,7 +40,7 @@ class HBridgeActivator(Activator):
     GPIO.setup(self.in4_pin, GPIO.OUT)
     self.enable()
 
-  def stop(self):
+  def shutdown(self):
     self.disable()
     GPIO.cleanup()
 

@@ -73,6 +73,7 @@ class AccelProfile(RampProfile):
       # self._step_interval_us = 0
       # self._current_speed = 0.0
       # self._ramp_step_number = 0
+      self.stop()
       self.set_current_steps(0)
       return
 

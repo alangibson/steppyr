@@ -14,10 +14,10 @@ class Activator:
     # Microstep resolution
     self._microsteps = microsteps
 
-  def start(self):
+  def activate(self):
     pass
 
-  def stop(self):
+  def shutdown(self):
     pass
 
   def enable(self):

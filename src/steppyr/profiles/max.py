@@ -31,7 +31,7 @@ class MaxProfile(RampProfile):
       self._direction = calc_direction(self.steps_to_go)
 
     # Make sure accelerate and decelerate ramps don't overlap
-    steps_being_moved = calc_steps_being_moved(self._target_steps, self._previous_target_position)
+    steps_being_moved = calc_steps_being_moved(self._target_steps, self._previous_target_steps)
     adjusted_deceleration_steps = min(self._deceleration_steps, steps_being_moved - self._acceleration_steps)
     # HACK fix the math so this conditional is not needed
     #if adjusted_deceleration_steps <= 0:

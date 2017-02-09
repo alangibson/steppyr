@@ -18,25 +18,25 @@ class StepperDriver:
     self._activator = activator
     self._profile = profile
 
-  def start(self):
+  def activate(self):
     """
     Must be called before using this driver.
     Implementing classes should use this method to initialize the hardware.
     """
-    self._activator.start()
+    self._activator.activate()
 
-  def stop(self):
+  def shutdown(self):
     """
     Must be called when this driver is no longer needed.
     Implementing classes should use this method to deactivate the hardware.
     """
-    self._activator.stop()
+    self._activator.shutdown()
 
-  def abort(self):
+  def stop(self):
     """
     Immediately stop the current move.
     """
-    self._profile.set_current_steps(self._profile.current_steps)
+    self._profile.stop()
 
   def move(self, relative_steps):
     """
@@ -83,9 +83,6 @@ class StepperDriver:
     """
     # Dont do anything unless we actually have a step interval
     # and dont do anything unless we have somewhere to go
-    # if not self._profile.step_interval_us or not self._profile.distance_to_go:
-    #   return False
-
     if self._profile.should_step():
       # It is time to do a step
 
@@ -106,9 +103,6 @@ class StepperDriver:
     """
     while self._profile.is_moving:
       await asyncio.sleep(0)
-
-  def reset_step_counter(self):
-    self._profile.set_current_steps(0)
 
   def predict_steps_to_go(self, target_steps):
     """
@@ -131,8 +125,11 @@ class StepperDriver:
     return self._profile
 
   #
-  # Proxy profile methods
+  # Proxy methods
   #
+
+  def step(self, direction):
+    self._activator.step(self._profile.direction)
 
   def set_microsteps(self, microsteps):
     self._activator.set_microsteps(microsteps)
@@ -194,24 +191,8 @@ class StepperDriver:
   def target_acceleration(self):
     return self._profile.target_acceleration
 
-  #
-  # Activator proxy methods
-  #
-
-  def step(self, direction):
-    log.debug('stepping: current_steps=%s direction=%s', self._profile.current_steps, self._profile.direction)
-    self._activator.step(self._profile.direction)
-
   def set_pulse_width(self, pulse_width_us):
     """
     Set the step pulse width in microseconds.
     """
     self._activator.set_pulse_width(pulse_width_us)
-
-  def enable(self):
-    """ Enable hardware (possibly temporarily) """
-    self._activator.enable()
-
-  def disable(self):
-    """ Disable hardware (possibly temporarily) """
-    self._activator.disable()

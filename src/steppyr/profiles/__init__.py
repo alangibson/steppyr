@@ -22,7 +22,7 @@ class RampProfile:
     # Last requested absolute target position in steps
     self._target_steps = 0
     # Previously set _target_steps. Used in calculating ramps
-    self._previous_target_position = 0
+    self._previous_target_steps = 0
     # Acceleration in steps per second per second
     # Defaults to 1.0 to avoid divide by zero errors
     self._target_acceleration = 1.0
@@ -36,6 +36,13 @@ class RampProfile:
     # Time in microseconds that last step occured
     self._last_step_time_us = 0
     self._next_step_time_us = None
+
+  def stop(self):
+    """
+    Reset speed to 0.
+    """
+    self._step_interval_us = 0
+    self._current_speed = 0.0
 
   def set_target_speed(self, speed):
     """
@@ -69,7 +76,7 @@ class RampProfile:
 
   def set_target_steps(self, absolute_steps):
     if self._target_steps != absolute_steps:
-      self._previous_target_position = self._target_steps
+      self._previous_target_steps = self._target_steps
       self._target_steps = absolute_steps
       self.compute_new_speed()
 
@@ -113,8 +120,6 @@ class RampProfile:
     Useful during initialisation or after initial positioning.
     """
     self._target_steps = self._current_steps = position
-    self._step_interval_us = 0
-    self._current_speed = 0.0
 
   def set_microsteps(self, microsteps):
     """

@@ -29,8 +29,8 @@ class A4988Activator(StepDirActivator):
     self.ms2_pin = ms2_pin
     self.ms1_pin = ms1_pin
 
-  def start(self):
-    super().start()
+  def activate(self):
+    super().activate()
     GPIO.setup(ms1_pin, GPIO.OUT)
     GPIO.setup(ms2_pin, GPIO.OUT)
     GPIO.setup(ms3_pin, GPIO.OUT)

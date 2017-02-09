@@ -1,3 +1,4 @@
+import unittest
 from steppyr import StepperDriver
 from steppyr.activators.spi import SPI
 from steppyr.activators import tmc26x
@@ -20,77 +21,6 @@ def init():
     profile=RectangleProfile()
   )
   return (spi_dev, driver)
-
-def test_dump():
-
-  print('REGISTERS')
-  for key, value in tmc26x.REGISTERS.items():
-    print('  ', key, value, bin(value)[2:])
-
-  print('DRIVER_CONTROL_REGISTER')
-  for key, value in tmc26x.DRIVER_CONTROL_REGISTER.items():
-    print('  ', key, value, bin(value)[2:])
-
-  spi_dev, driver = init()
-  driver.start()
-
-  # Enable or disable chopper current flow
-  driver.disable()
-  driver.enable()
-
-  print('INITIAL_MICROSTEPPING')
-  print('  ', bin(tmc26x.INITIAL_MICROSTEPPING))
-
-  print('driver.driver_control_register_value')
-  print('  ', tmc26x.tobin(driver.activator.driver_control_register_value, 20))
-
-  print('MICROSTEP_RESOLUTION')
-  print('  ', tmc26x.MICROSTEP_RESOLUTION)
-
-  print('microsteps')
-  print('  ', bin(driver.activator.microsteps))
-
-  print('Register Values')
-  print('  driver_control_register_value       ', tmc26x.tobin(driver.activator.driver_control_register_value, 20))
-  print('  chopper_config_register             ', tmc26x.tobin(driver.activator.chopper_config_register, 20))
-  print('  cool_step_register_value            ', tmc26x.tobin(driver.activator.cool_step_register_value, 20))
-  print('  stall_guard2_current_register_value ', tmc26x.tobin(driver.activator.stall_guard2_current_register_value, 20))
-  print('  driver_configuration_register_value ', tmc26x.tobin(driver.activator.driver_configuration_register_value, 20))
-
-  print('steps left', driver.steps_to_go)
-  driver.step(100)
-  print('steps left', driver.steps_to_go)
-
-def test_get_current():
-  spi_dev, driver = init()
-  current = driver.activator.get_current()
-  print('current', current)
-
-def test_set_stall_guard_threshold():
-  spi_dev, driver = init()
-  driver.activator.set_stall_guard_threshold(20, True)
-  driver.activator.set_stall_guard_threshold(999, False)
-
-def test_get_stall_guard_threshold():
-  spi_dev, driver = init()
-  # In range
-  t_in = 20
-  driver.activator.set_stall_guard_threshold(t_in, True)
-  t_out = driver.activator.get_stall_guard_threshold()
-  assert(t_in == t_out)
-  # FIXME doesnt work correctly
-  # out of range
-  # t_in = -100
-  # driver.set_stall_guard_threshold(t_in, True)
-  # t_out = driver.get_stall_guard_threshold()
-  # print('stall_guard_threshold', t_in, t_out)
-  # assert(t_in == 63)
-
-def dump():
-  spi_dev, driver = init()
-  debug_last_status(driver)
-  debug_last_status(driver, tmc26x.TMC26X_READOUT_STALLGUARD)
-  debug_last_status(driver, tmc26x.TMC26X_READOUT_CURRENT)
 
 def debug_last_status(driver, read_status_value=None):
   print('INFO: driver started', driver.activator.started)
@@ -123,9 +53,78 @@ def debug_last_status(driver, read_status_value=None):
     print("INFO: Approx Stall Guard:", stallGuard)
     print("INFO: Current level", current)
 
+class TestSuite(unittest.TestCase):
+
+  def test_dump(self):
+
+    print('REGISTERS')
+    for key, value in tmc26x.REGISTERS.items():
+      print('  ', key, value, bin(value)[2:])
+
+    print('DRIVER_CONTROL_REGISTER')
+    for key, value in tmc26x.DRIVER_CONTROL_REGISTER.items():
+      print('  ', key, value, bin(value)[2:])
+
+    spi_dev, driver = init()
+    driver.activate()
+
+    # Enable or disable chopper current flow
+    driver.activator.disable()
+    driver.activator.enable()
+
+    print('INITIAL_MICROSTEPPING')
+    print('  ', bin(tmc26x.INITIAL_MICROSTEPPING))
+
+    print('driver.driver_control_register_value')
+    print('  ', tmc26x.tobin(driver.activator.driver_control_register_value, 20))
+
+    print('MICROSTEP_RESOLUTION')
+    print('  ', tmc26x.MICROSTEP_RESOLUTION)
+
+    print('microsteps')
+    print('  ', bin(driver.activator.microsteps))
+
+    print('Register Values')
+    print('  driver_control_register_value       ', tmc26x.tobin(driver.activator.driver_control_register_value, 20))
+    print('  chopper_config_register             ', tmc26x.tobin(driver.activator.chopper_config_register, 20))
+    print('  cool_step_register_value            ', tmc26x.tobin(driver.activator.cool_step_register_value, 20))
+    print('  stall_guard2_current_register_value ', tmc26x.tobin(driver.activator.stall_guard2_current_register_value, 20))
+    print('  driver_configuration_register_value ', tmc26x.tobin(driver.activator.driver_configuration_register_value, 20))
+
+    print('steps left', driver.steps_to_go)
+    driver.step(100)
+    print('steps left', driver.steps_to_go)
+
+  def test_get_current(self):
+    spi_dev, driver = init()
+    current = driver.activator.get_current()
+    print('current', current)
+
+  def test_set_stall_guard_threshold(self):
+    spi_dev, driver = init()
+    driver.activator.set_stall_guard_threshold(20, True)
+    driver.activator.set_stall_guard_threshold(999, False)
+
+  def test_get_stall_guard_threshold(self):
+    spi_dev, driver = init()
+    # In range
+    t_in = 20
+    driver.activator.set_stall_guard_threshold(t_in, True)
+    t_out = driver.activator.get_stall_guard_threshold()
+    assert(t_in == t_out)
+    # FIXME doesnt work correctly
+    # out of range
+    # t_in = -100
+    # driver.set_stall_guard_threshold(t_in, True)
+    # t_out = driver.get_stall_guard_threshold()
+    # print('stall_guard_threshold', t_in, t_out)
+    # assert(t_in == 63)
+
+  def dump(self):
+    spi_dev, driver = init()
+    debug_last_status(driver)
+    debug_last_status(driver, tmc26x.TMC26X_READOUT_STALLGUARD)
+    debug_last_status(driver, tmc26x.TMC26X_READOUT_CURRENT)
+
 if __name__ == '__main__':
-  test_dump()
-  test_get_current()
-  test_set_stall_guard_threshold()
-  test_get_stall_guard_threshold()
-  dump()
+  unittest.main()

@@ -23,13 +23,13 @@ class StepDirActivator(Activator):
     if self._enable_pin:
       GPIO.setup(self._enable_pin, GPIO.OUT, initial=GPIO.HIGH)
 
-  def start(self):
+  def activate(self):
     GPIO.setmode(self._pin_mode)
     GPIO.setup(self._dir_pin, GPIO.OUT, initial=GPIO.HIGH)
     GPIO.setup(self._step_pin, GPIO.OUT, initial=GPIO.LOW)
     self.enable()
 
-  def stop(self):
+  def shutdown(self):
     self.disable()
 
   def step(self, direction):

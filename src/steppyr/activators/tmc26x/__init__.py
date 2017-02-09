@@ -130,7 +130,7 @@ class TMC26XActivator(StepDirActivator):
     self.stall_guard2_register = StallGuard2ControlRegister()
     self.driver_config_register = DriverConfigRegister()
 
-  def start(self):
+  def activate(self):
     # set the current
     self.set_current(self._current_ma)
     # set to a conservative start value
@@ -149,10 +149,10 @@ class TMC26XActivator(StepDirActivator):
     self._spi.write(self.stall_guard2_register)
     self._spi.write(self.driver_config_register)
     self._started = True
-    super().start()
+    super().activate()
 
-  def stop(self):
-    super().stop()
+  def shutdown(self):
+    super().shutdown()
     self.disable()
 
   def enable(self):
