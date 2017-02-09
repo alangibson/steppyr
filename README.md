@@ -44,7 +44,7 @@ TMC26X example code:
       )
     )
     stepper.set_target_speed(1000) # steps per second
-    # stepper.set_acceleration(40000) # steps per second per second
+    # stepper.set_target_acceleration(40000) # steps per second per second
     # stepper.set_pulse_width(2) # microseconds
 
 TMC4361 example code:

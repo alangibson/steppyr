@@ -198,9 +198,9 @@ class TMC4361Driver(Driver):
     # Put the start register back the way it was
     # FIXME self._spi.writeRegister(registers.TMC4361_START_CONFIG_REGISTER, oldStartRegister)
 
-  def set_acceleration(self, acceleration):
+  def set_target_acceleration(self, acceleration):
     """
-    Implements Profile.set_acceleration(acceleration) method.
+    Implements Profile.set_target_acceleration(acceleration) method.
 
     acceleration: (int) steps / sec / sec
     """
