@@ -13,7 +13,8 @@ log = logging.getLogger(__name__)
 # Toggle calling of the report() function in should_step()
 REPORT = False
 
-CLOCK_FREQUENCY = 16000000
+# CLOCK_FREQUENCY = 16000000
+CLOCK_FREQUENCY = 4000000
 
 # Defines ported to Python functions
 # simple FP math see https://ucexperiment.wordpress.com/2012/10/28/fixed-point-math-on-the-arduino-platform/
@@ -185,10 +186,6 @@ class TMC4361Driver(Driver):
     """
     Implements Profile.set_target_speed(speed) method.
     """
-    self._target_speed = speed
-    # 24 bits integer part, 8 bits decimal places
-    # v_max = speed << 8
-    # self._spi.writeRegister(TMC4361_V_MAX_REGISTER, v_max)
     self._spi.write(self.v_max_register.set(VMaxRegister.bits.VMAX, speed))
 
   def set_target_steps(self, absolute_steps):
@@ -196,13 +193,7 @@ class TMC4361Driver(Driver):
     Implements Profile.set_target_steps(absolute_steps) method.
     Acts like StepperController.move_to(position) method
     """
-    # FIXME We want an immediate start, so temporarily modify the start register.
-    # oldStartRegister = self._spi.readRegister(registers.TMC4361_START_CONFIG_REGISTER)
-    # self._spi.writeRegister(registers.TMC4361_START_CONFIG_REGISTER, _BV(5)) # keep START as an input
     self._spi.write(self.x_target_register.set(XTargetRegister.bits.XTARGET, absolute_steps))
-    # self._spi.writeRegister(registers.TMC4361_POSITION_COMPARE_REGISTER, position)
-    # Put the start register back the way it was
-    # FIXME self._spi.writeRegister(registers.TMC4361_START_CONFIG_REGISTER, oldStartRegister)
 
   def set_target_acceleration(self, acceleration):
     """
@@ -219,6 +210,11 @@ class TMC4361Driver(Driver):
     """
     self._spi.write(self.motor_driver_settings_register
       .set(MotorDriverSettingsRegister.bits.FS_PER_REV, full_steps_per_rev) )
+
+  @property
+  def full_steps_per_rev(self):
+    self.motor_driver_settings_register = self._spi.read(self.motor_driver_settings_register)
+    return self.motor_driver_settings_register.get(MotorDriverSettingsRegister.bits.FS_PER_REV)
 
   def set_current_steps(self, position):
     """
@@ -595,6 +591,8 @@ class TMC4361Driver(Driver):
     log.debug('    current_acceleration %s', self.current_acceleration)
     log.debug('    target_acceleration %s', self.target_acceleration)
     log.debug('    target_deceleration %s', self.target_deceleration)
+    log.debug('    microsteps %s', self.microsteps)
+    log.debug('    full_steps_per_rev %s', self.full_steps_per_rev)
     # Probably not a good idea to constantly read this since it is cleared on read.
     # log.debug('    get_status_events', self.get_status_events())
     log.debug('    get_status_flags %s', self.get_status_flags())
