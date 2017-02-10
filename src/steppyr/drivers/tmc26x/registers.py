@@ -1,3 +1,4 @@
+from steppyr.lib import AttributeDict
 from steppyr.lib.bits import unset_bit, set_bit, get_bits, mask, _BV, lsb
 from .io import Datagram
 
@@ -38,11 +39,6 @@ CHOPPER_CONFIG_REGISTER = {
   'HYSTERESIS_START_VALUE_SHIFT': 4,
   'T_OFF_TIMING_PATERN': 0XF
   }
-
-# TODO copied from tmc4361.registers. Refactor.
-class AttributeDict(dict):
-  __getattr__ = dict.__getitem__
-  __setattr__ = dict.__setitem__
 
 class Register(Datagram):
 

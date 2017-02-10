@@ -11,3 +11,17 @@ MICROSTEP_RESOLUTION = {
   2:    0b0111,  # halfstep
   1:    0b1000   # fullstep
 }
+
+def parse_ini(path):
+  """
+  Parses ini files exported from TMCL-IDE.
+  """
+  with open(path) as f:
+    for line in f.readlines():
+      # remove tabs and comments
+      split = line.replace('\t', '').replace(' ', '').split(';')
+      if not len(split[0]) or split[0][0] != '0':
+        continue
+      key, value = split[0].split('=')
+      register_code, register_value = int(key, 16), int(value, 16)
+      yield (register_code, register_value)

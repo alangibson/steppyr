@@ -1,8 +1,10 @@
 """
 registers for TMC4361
 """
-from steppyr.lib.bits import unset_bit, set_bit, get_bits, mask, _BV, lsb
 from steppyr.drivers.tmc4361.io import Datagram
+from steppyr.lib import AttributeDict
+from steppyr.lib.bits import unset_bit, set_bit, get_bits, mask, _BV, decode_twos_complement, number_to_fixed, \
+  fixed_to_number
 
 WRITE_MASK = 0x80 # register | WRITE_MASK
 READ_MASK = 0x7F # register & READ_MASK
@@ -11,22 +13,6 @@ READ_MASK = 0x7F # register & READ_MASK
 # simple FP math see https://ucexperiment.wordpress.com/2012/10/28/fixed-point-math-on-the-arduino-platform/
 FIXED_23_8_MAKE = lambda a: a * (1 << 8)
 FIXED_22_2_MAKE = lambda a: a * (1 << 2)
-
-def decode_twos_complement(input_value, num_bits):
-	"""
-  Calculates a two's complement integer from the given input value's bits
-  https://en.wikipedia.org/wiki/Two's_complement
-  """
-	mask = 2**(num_bits - 1)
-	return -(input_value & mask) + (input_value & ~mask)
-
-# Convert floating point to/from fixed point
-number_to_fixed = lambda float_value, fractional_bits: int(float_value * (1 << fractional_bits))
-fixed_to_number = lambda fixed_value, fractional_bits: fixed_value * (2**-fractional_bits)
-
-class AttributeDict(dict):
-  __getattr__ = dict.__getitem__
-  __setattr__ = dict.__setitem__
 
 class Representation:
   """
@@ -887,6 +873,270 @@ class ResetClockAndGatingRegister(Register):
     'RESET_REG': Representation(8, 31)
   })
 
-# TODO finish this
+class CurrentScalingConfRegister(Register):
+  REGISTER = 0x05
+  bits = AttributeDict({
+    # 0 hold_current_scale_en
+    #   0 No hold current scaling during standstill phase.
+    #   1 Hold current scaling during standstill phase.
+    'HOLD_CURRENT_SCALE_EN': Representation(0),
+    # 1 drive_current_scale_en
+    #   0 No drive current scaling during motion.
+    #   1 Drive current scaling during motion.
+    'DRIVE_CURRENT_SCALE_EN': Representation(1),
+    # 2 boost_current_on_acc_en
+    #   0 No boost current scaling for deceleration ramps.
+    #   1 Boost current scaling if RAMP_STATE = b’01 (acceleration slopes).
+    'BOOST_CURRENT_ON_ACC_EN': Representation(2),
+    # 3 boost_current_on_dec_en
+    #   0 No boost current scaling for deceleration ramps.
+    #   1 Boost current scaling if RAMP_STATE = b’10 (deceleration slopes).
+    'BOOST_CURRENT_ON_DEC_EN': Representation(3),
+    # 4 boost_current_after_start_en
+    #   0 No boost current at ramp start.
+    #   1 Temporary boost current if VACTUAL = 0 and new ramp starts.
+    'BOOST_CURRENT_AFTER_START_EN': Representation(4),
+    # 5 sec_drive_current_scale_en
+    #   0 One drive current value for the whole motion ramp.
+    #   1 Second drive current scaling for VACTUAL > VDRV_SCALE_LIMIT.
+    'SEC_DRIVE_CURRENT_SCALE_EN': Representation(5),
+    # 6 freewheeling_en
+    #   0 No freewheeling.
+    #   1 Freewheeling after standby phase.
+    'FREEWHEELING_EN': Representation(6),
+    # 7 closed_loop_scale_en
+    #   0 No closed-loop current scaling.
+    #   1 Closed-loop current scaling – CURRENT_CONF(6:0) = 0 is set automatically
+    #     Turn off for closed-loop calibration with maximum current!
+    'CLOSED_LOOP_SCALE_EN': Representation(7),
+    # 8 pwm_scale_en
+    #   0 PWM scaling is disabled.
+    #   1 PWM scaling is enabled.
+    'PWM_SCALE_EN': Representation(8),
+    # 15:9 Reserved. Set to 0x00.
+    # 31:16 PWM_AMPL
+    # PWM amplitude during Voltage PWM mode at VACTUAL = 0.
+    # i Maximum duty cycle = (0.5 + (PWM_AMPL + 1) / 217)
+    # Minimum duty cycle = (0.5 – (PWM_AMPL + 1) / 2
+    # PWM_AMPL = 216 – 1 at VACTUAL = PWM_VMAX.
+    'PWM_AMPL': Representation(16, 31)
+  })
+
 class InputFilterRegister(Register):
   REGISTER = 0x3
+  # TODO finish this
+
+class CurrentScaleValuesRegister(Register):
+  REGISTER = 0x06
+  # TODO finish this class
+
+class StandbyDelayRegister(Register):
+  REGISTER = 0x15
+  bits = AttributeDict({
+    # RW. 31:0 STDBY_DELAY(Default: 0x00000000)
+    # Delay time [# clock cycles] between ramp stop and activating standby phase.
+    'STDBY_DELAY': Representation(0, 31)
+  })
+
+class FreewheelDelayRegister(Register):
+  REGISTER = 0x16
+  bits = AttributeDict({
+    # RW. 31:0 FREEWHEEL_DELAY (Default:0x00000000)
+    # Delay time [# clock cycles] between initialization of active standby phase and
+    # freewheeling initialization.
+    'FREEWHEEL_DELAY': Representation(0, 31)
+  })
+
+class VDRVScaleLimitRegister(Register):
+  REGISTER = 0x17
+  bits = AttributeDict({
+    # 23: 0 VDRV_SCALE_LIMIT(Default: 0x000000)
+    # (Voltage PWM mode is not active)
+    # Drive scaling separator:
+    # DRV2_SCALE_VAL is active in case VACTUAL > VDRV_SCALE_LIMIT
+    # DRV1_SCALE_VAL is active in case VACTUAL ≤ VDRV_SCALE_LIMIT
+    # 2nd assignment: Also used as PWM_VMAX if Voltage PWM is enabled(see 19.17. )
+    'VDRV_SCALE_LIMIT': Representation(0, 23)
+  })
+
+class UpScaleDelayRegister(Register):
+  REGISTER = 0x18
+  bits = AttributeDict({
+    # RW 23:0
+    # UP_SCALE_DELAY(Default: 0x000000) (Open - loop operation)
+    #   Increment delay[  # clock cycles]. The value defines the clock cycles, which are used to increase the current
+    #   scale value for one step towards higher values.
+    # CL_UPSCALE_DELAY (Default:0x000000) (Closed - loop operation)
+    #   Increment delay[  # clock cycles]. The value defines the clock cycles, which are used to increase the current
+    #   scale value for one step towards higher current values during closed-loop operation.
+    'UP_SCALE_DELAY': Representation(0, 23),
+    'CL_UPSCALE_DELAY': Representation(0, 23)
+  })
+
+class HoldScaleDelayRegister(Register):
+  REGISTER = 0x19
+  bits = AttributeDict({
+    # 23: 0
+    # HOLD_SCALE_DELAY(Default: 0x000000) (Open - loop operation)
+    #   Decrement delay[  # clock cycles] to decrease the actual scale value by one step towards hold current.
+    # CL_DNSCALE_DELAY(Default: 0x000000) (Closed - loop operation)
+    #   Decrement delay[  # clock cycles] to decrease the current scale value by one step towards lower current values during closed - loop operation.
+    'HOLD_SCALE_DELAY': Representation(0, 23),
+    'CL_DNSCALE_DELAY': Representation(0, 23)
+  })
+
+class DriveScaleDelayRegister(Register):
+  REGISTER = 0x1A
+  bits = AttributeDict({
+    # 23:0 DRV_SCALE_DELAY(Default: 0x000000)
+    # Decrement delay[  # clock cycles], which signifies current scale value decrease by one step towards lower value.
+    'DRV_SCALE_DELAY': Representation(0, 23)
+  })
+
+class BoostTimeRegister(Register):
+  REGISTER = 0x1B
+  bits = AttributeDict({
+    # RW 31:0
+    # BOOST_TIME(Default: 0x00000000)
+    # Time[  # clk cycles] after a ramp start when boost scaling is active.
+    'BOOST_TIME': Representation(0, 31)
+  })
+
+class BetaGammaRegister(Register):
+  REGISTER = 0x1C
+  bits = AttributeDict({
+    # 8:0 CL_BETA(0x0FF)
+    # Maximum commutation angle for closed - loop regulation.
+    # - Set CL_BETA > 255 carefully(esp. if cl_vlimit_en = 1).
+    # - Exactly 255 is recommended for best performance.
+    'CL_BETA': Representation(0, 8),
+    # 23:16
+    # CL_GAMMA(Default: 0xFF)
+    # Maximum balancing angle to compensate back - EMF at higher velocities during closed - loop regulation.
+    'CL_GAMMA': Representation(16, 23)
+  })
+
+class SpiDacAddressRegister(Register):
+  REGISTER = 0x1D
+  bits = AttributeDict({
+    # 15:0 DAC_ADDR_A(Default: 0x0000)
+    # Fixed command / address, which is sent via SPI output before sending CURRENTA_SPI values.
+    'DAC_ADDR_A': Representation(0, 15),
+    # 31:16 DAC_ADDR_B(Default: 0x0000)
+    # Fixed command / address, which is sent via SPI output before sending current CURRENTB_SPI values.
+    'DAC_ADDR_B': Representation(16, 31),
+    # 23:0 2nd assignment: Also used as SPI_SWITCH_VEL if SPI - DAC mode is disabled(19.16.)
+    'SPI_SWITCH_VEL': Representation(0, 23)
+  })
+
+class FullStepVelocityRegister(Register):
+  REGISTER = 0x60
+  bits = AttributeDict({
+    # 31:0 FS_VEL(Default:0x000000) (Closed-loop and dcStep operation are disabled)
+    # Minimum fullstep velocity [pps].
+    # In case |VACTUAL| > FS_VEL fullstep operation is active, if enabled.
+    # 2nd assignment: Also used as DC_VEL if dcStep is enabled (see section 19.27. )
+    # 3rd assignment: Also used as CL_VMIN_EMF if closed-loop is enabled (see 19.26. )
+    # "Set DC_VEL register 0x60 as threshold velocity value[pps] at which dcStep is activated."
+    'FS_VEL': Representation(0, 31)
+  })
+
+class MSLUT0Register(Register):
+  REGISTER = 0x70
+  bits = AttributeDict({
+    # W. 31:0 MSLUT[0](Default: 0xAAAAB554)
+    # Each bit defines the difference between consecutive values in the microstep look - up table MSLUT( in combination with MSLUTSEL).
+    'MSLUT0': Representation(0, 31)
+  })
+
+class MSLUT1Register(Register):
+  REGISTER = 0x71
+  bits = AttributeDict({
+    # W. 31:0 MSLUT[1](Default: 0x4A9554AA)
+    # Each bit defines the difference between consecutive values in the microstep look - up table MSLUT( in combination with MSLUTSEL).
+    'MSLUT1': Representation(0, 31)
+  })
+
+class MSLUT2Register(Register):
+  REGISTER = 0x72
+  bits = AttributeDict({
+    # W. 31:0 MSLUT[2](Default: 0x24492929)
+    # Each bit defines the difference between consecutive values in the microstep look - up table MSLUT( in combination with MSLUTSEL).
+    'MSLUT2': Representation(0, 31)
+  })
+
+class MSLUT3Register(Register):
+  REGISTER = 0x73
+  bits = AttributeDict({
+    # W. 31:0 MSLUT[3](Default: 0x10104222)
+    # Each bit defines the difference between consecutive values in the microstep look - up table MSLUT( in combination with MSLUTSEL).
+    'MSLUT3': Representation(0, 31)
+  })
+
+class MSLUT4Register(Register):
+  REGISTER = 0x74
+  bits = AttributeDict({
+    # W. 31:0 MSLUT[4](Default: 0xFBFFFFFF)
+    # Each bit defines the difference between consecutive values in the microstep look - up table MSLUT( in combination with MSLUTSEL).
+    'MSLUT4': Representation(0, 31)
+  })
+
+class MSLUT5Register(Register):
+  REGISTER = 0x75
+  bits = AttributeDict({
+    # W. 31:0 MSLUT[5](Default: 0xB5BB777D)
+    # Each bit defines the difference between consecutive values in the microstep look - up table MSLUT( in combination with MSLUTSEL).
+    'MSLUT5': Representation(0, 31)
+  })
+
+class MSLUT6Register(Register):
+  REGISTER = 0x76
+  bits = AttributeDict({
+    # W. 31:0 MSLUT[6](Default: 0x49295556)
+    # Each bit defines the difference between consecutive values in the microstep look - up table MSLUT( in combination with MSLUTSEL).
+    'MSLUT6': Representation(0, 31)
+  })
+
+class MSLUT7Register(Register):
+  REGISTER = 0x77
+  bits = AttributeDict({
+    # W. 31:0 MSLUT[7](Default: 0x00404222)
+    # Each bit defines the difference between consecutive values in the microstep look - up table MSLUT( in combination with MSLUTSEL).
+    'MSLUT7': Representation(0, 31)
+  })
+
+class MSLUTSelectRegister(Register):
+  REGISTER = 0x78
+  bits = AttributeDict({
+    # W. 31:0 MSLUTSEL(Default: 0xFFFF8056)
+    # Definition of the four segments within each quarter MSLUT wave.
+    'MSLUTSEL': Representation(0, 31)
+  })
+
+class MicrostepCountRegister(Register):
+  REGISTER = 0x79
+  bits = AttributeDict({
+    # R 9:0 MSCNT(Default: 0x000)
+    # Actual µStep position of the sine value.
+    # W 2nd assignment: Also used as MS_OFFSET if Voltage PWM is enabled(see 19.17. )
+    'MSCNT': Representation(0, 9),
+    'MS_OFFSET': Representation(0, 9)
+  })
+
+class StartSineRegister(Register):
+  REGISTER = 0x7E
+  bits = AttributeDict({
+    # W 7:0 START_SIN(Default: 0x00)
+    # Start value for sine waveform.
+    'START_SIN': Representation(0, 7),
+    # W 23:16 START_SIN90_120(Default: 0xF7)
+    # Start value for cosine waveform.
+    'START_SIN90_120': Representation(16, 23),
+    # W 31:24
+    # 2nd assignment: Also used as DAC_OFFSET for write access(see section 19.30.)
+    'DAC_OFFSET': Representation(24, 31)
+  })
+
+# TODO add these registers
+# 0x6c COVER_LOW POLLING_STATUS
+# 0x6d COVER_HIGH POLLING_REG
