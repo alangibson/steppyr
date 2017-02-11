@@ -1081,6 +1081,15 @@ class StartSineRegister(Register):
     'DAC_OFFSET': Representation(24, 31)
   })
 
+class GearRatioRegister(Register):
+  REGISTER = 0x12
+  bits = AttributeDict({
+    # 31:0 GEAR_RATIO(Default: 0x01000000)
+    # Constant value that is added to the internal position counter by an active step at STPIN.
+    # Value representation: 8 digits and 24 decimal places.
+    'GEAR_RATIO': Representation(0, 31, 8, 24)
+  })
+
 # TODO add these registers
 # 0x6c COVER_LOW POLLING_STATUS
 # 0x6d COVER_HIGH POLLING_REG

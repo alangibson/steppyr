@@ -1,5 +1,6 @@
 import logging
 import RPi.GPIO as GPIO
+import steppyr
 from steppyr.drivers import Driver
 from steppyr.drivers.tmc26x import TMC26XDriver
 from steppyr.drivers.tmc4361.registers import *
@@ -57,32 +58,37 @@ class TMC4361Driver(Driver):
         .set(StatusEventRegister.bits.TARGET_REACHED)
         .set(StatusEventRegister.bits.POS_COMP_REACHED),
       CurrentScaleValuesRegister: CurrentScaleValuesRegister(),
-      StandbyDelayRegister: StandbyDelayRegister(),
-      FreewheelDelayRegister: FreewheelDelayRegister(),
-      VDRVScaleLimitRegister: VDRVScaleLimitRegister(),
-      UpScaleDelayRegister: UpScaleDelayRegister(),
-      HoldScaleDelayRegister: HoldScaleDelayRegister(),
-      DriveScaleDelayRegister: DriveScaleDelayRegister(),
-      BoostTimeRegister: BoostTimeRegister(),
-      BetaGammaRegister: BetaGammaRegister(),
-      SpiDacAddressRegister: SpiDacAddressRegister(),
-      FullStepVelocityRegister: FullStepVelocityRegister(),
-      MSLUT0Register: MSLUT0Register(),
-      MSLUT1Register: MSLUT1Register(),
-      MSLUT2Register: MSLUT2Register(),
-      MSLUT3Register: MSLUT3Register(),
-      MSLUT4Register: MSLUT4Register(),
-      MSLUT5Register: MSLUT5Register(),
-      MSLUT6Register: MSLUT6Register(),
-      MSLUT7Register: MSLUT7Register(),
-      MSLUTSelectRegister: MSLUTSelectRegister(),
-      MicrostepCountRegister: MicrostepCountRegister(),
-      StartSineRegister: StartSineRegister()
+      #StandbyDelayRegister: StandbyDelayRegister(),
+      #FreewheelDelayRegister: FreewheelDelayRegister(),
+      #VDRVScaleLimitRegister: VDRVScaleLimitRegister(),
+      #UpScaleDelayRegister: UpScaleDelayRegister(),
+      #HoldScaleDelayRegister: HoldScaleDelayRegister(),
+      #DriveScaleDelayRegister: DriveScaleDelayRegister(),
+      #BoostTimeRegister: BoostTimeRegister(),
+      #BetaGammaRegister: BetaGammaRegister(),
+      #SpiDacAddressRegister: SpiDacAddressRegister(),
+      #FullStepVelocityRegister: FullStepVelocityRegister(),
+      #MSLUT0Register: MSLUT0Register(),
+      #MSLUT1Register: MSLUT1Register(),
+      #MSLUT2Register: MSLUT2Register(),
+      #MSLUT3Register: MSLUT3Register(),
+      #MSLUT4Register: MSLUT4Register(),
+      #MSLUT5Register: MSLUT5Register(),
+      #MSLUT6Register: MSLUT6Register(),
+      #MSLUT7Register: MSLUT7Register(),
+      #MSLUTSelectRegister: MSLUTSelectRegister(),
+      #MicrostepCountRegister: MicrostepCountRegister(),
+      #StartSineRegister: StartSineRegister(),
+      #GearRatioRegister: GearRatioRegister()
     }
 
   def flush_registers(self):
     for register in self._registers.values():
       self._spi.write(register)
+
+  def load_registers(self):
+    for register_class, register in self._registers.items():
+      self._registers[register_class] = self._spi.read(register)
 
   def load_register(self, register_key):
     register = self._spi.read(self._registers[register_key])
@@ -130,6 +136,7 @@ class TMC4361Driver(Driver):
     # filter |= (2<<8) | 0x4000
     # self._spi.writeRegister(registers.TMC4361_INPUT_FILTER_REGISTER, filter)
     self.enable_tmc26x()
+    self.load_registers()
 
   def shutdown(self):
     """
@@ -257,8 +264,13 @@ class TMC4361Driver(Driver):
     """
     Implements Profile.direction method.
     """
-    # TODO Implement
-    pass
+    current_speed = self.load_register_value(VActualRegister, VActualRegister.bits.VACTUAL)
+    if current_speed < 0:
+      return steppyr.DIRECTION_CCW
+    elif current_speed > 0:
+      return steppyr.DIRECTION_CW
+    else:
+      return steppyr.DIRECTION_NONE
 
   @property
   def current_steps(self):
@@ -280,9 +292,17 @@ class TMC4361Driver(Driver):
     """
     Implements StepperController.stop() method.
     """
+    # TODO make stopping via VMAX work correctly
     # Docs say to set VMAX=0, but then we would always have to reset speed when we want to move.
+    # self._last_target_speed = self._registers[VMaxRegister].get(VMaxRegister.bits.VMAX)
     # self._spi.write(self._registers[VMaxRegister].set(VMaxRegister.bits.VMAX, 0))
-    self._spi.write(self._registers[VActualRegister].set(VMaxRegister.bits.VACTUAL, 0))
+    # Immediately switching back to original VMAX causes motor to just keep running
+    # self._spi.write(self._registers[VMaxRegister].set(VMaxRegister.bits.VMAX, self._last_target_speed))
+    # self._spi.write(self._registers[VActualRegister].set(VActualRegister.bits.VACTUAL, 0))
+    # Setting target position = current position.
+    # Warning: that means our position attribute is not reliable!
+    target_position = self._registers[XTargetRegister].get(XTargetRegister.bits.XTARGET)
+    self._spi.write(self._registers[XActualRegister].set(XActualRegister.bits.XACTUAL, target_position))
 
   # TODO const char homeMotorTMC4361
 
@@ -296,7 +316,7 @@ class TMC4361Driver(Driver):
 
   @property
   def target_deceleration(self):
-    self.load_register_value(DMaxRegister, DMaxRegister.bits.DMAX)
+    return self.load_register_value(DMaxRegister, DMaxRegister.bits.DMAX)
 
   def set_ramp_scurve(self, v_max, a_max, d_max, bow1, bow2, bow3, bow4,
     a_start=0, d_final=0,
@@ -580,6 +600,21 @@ class TMC4361Driver(Driver):
     # Probably not a good idea to constantly read this since it is cleared on read.
     # log.debug('    get_status_events', self.get_status_events())
     log.debug('    get_status_flags %s', self.get_status_flags())
+    for register_class, register in self._registers.items():
+      log.debug('    %s', register_class.__name__)
+      if not hasattr(register, 'bits'):
+        continue
+      for name, representation in register.bits.items():
+        value = register.get(representation)
+        if value:
+          log.debug('        %s %s', name, value)
+    log.debug('TMC26xDriver Status Report')
+    for register_class, register in self.tmc26x._registers.items():
+      log.debug('    %s', register_class.__name__)
+      for name, representation in register.bits.items():
+        value = register.get(representation)
+        if value:
+          log.debug('        %s %s', name, value)
 
   def enable_tmc26x(self):
     """
