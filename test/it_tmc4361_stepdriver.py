@@ -20,18 +20,24 @@ stepper = StepperController(
   driver=tmc4361,
   profile=tmc4361
 )
-
-stepper.activate()
 stepper.set_microsteps(1)
 # driver.set_target_speed(100)
 # driver.set_target_acceleration(10)
-stepper.profile.set_ramp_trapezoid(target_speed=100, target_acceleration=10, target_deceleration=10)
+stepper.profile.set_ramp_trapezoid(target_speed=200, target_acceleration=400, target_deceleration=400)
 #driver.profile.set_ramp_scurve(
 #  v_max=10000, a_max=100*10, d_max=100*10,
 #  bow1, bow2, bow3, bow4,
 #  a_start=0, d_final=0, v_start=0, v_stop=0)
 stepper.profile.set_full_steps_per_rev(200)
 stepper.profile.tmc26x.set_current(1000)
+stepper.profile.tmc26x.set_constant_off_time_chopper(
+  constant_off_time=7,
+  blank_time=54,
+  fast_decay_time_setting=13,
+  sine_wave_offset=12,
+  use_current_comparator=1)
+
+stepper.activate()
 
 stepper.move_to(1000)
 stepper.move_to(-1000)

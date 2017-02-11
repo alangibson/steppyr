@@ -279,7 +279,9 @@ class TMC4361Driver(Driver):
     """
     Implements StepperController.stop() method.
     """
-    self._spi.write(self._registers[VMaxRegister].set(VMaxRegister.bits.VMAX, 0))
+    # Docs say to set VMAX=0, but then we would always have to reset speed when we want to move.
+    # self._spi.write(self._registers[VMaxRegister].set(VMaxRegister.bits.VMAX, 0))
+    self._spi.write(self._registers[VActualRegister].set(VMaxRegister.bits.VACTUAL, 0))
 
   # TODO const char homeMotorTMC4361
 
