@@ -17,6 +17,132 @@ class Register(TrinamicRegister, Datagram):
   def __init__(self, data=0, header=None, header_len=8, datagram_len=40):
     super().__init__(data=data, header=header, header_len=header_len, datagram_len=datagram_len)
 
+class ReferenceConfRegister(Register):
+  REGISTER = 0x01
+  bits = AttributeDict({
+    # 0 stop_left_en
+    #   0 STOPL signal processing disabled.
+    #   1 STOPL signal processing enabled.
+    'STOP_LEFT_EN': Representation(0),
+    # 1 stop_right_en
+    #   0 STOPR signal processing disabled.
+    #   1 STOPR signal processing enabled.
+    'STOP_RIGHT_EN': Representation(1),
+    # 2 pol_stop_left
+    #   0 STOPL input signal is low active.
+    #   1 STOPL input signal is high active.
+    'POL_STOP_LEFT': Representation(2),
+    # 3 pol_stop_right
+    #   0 STOPR input signal is low active.
+    #   1 STOPR input signal is high active.
+    'POL_STOP_RIGHT': Representation(3),
+    # 4 invert_stop_direction
+    #   0 STOPL / STOPR stops motor in negative / positive direction.
+    #   1 STOPL / STOPR stops motor in positive / negative direction.
+    'INVERT_STOP_DIRECTION': Representation(4),
+    # 5 soft_stop_en
+    #   0 Hard stop enabled. VACTUAL is immediately set to 0 on any external stop event.
+    #   1 Soft stop enabled.A linear velocity ramp is used for decreasing VACTUAL to v = 0.
+    'SOFT_STOP_EN': Representation(5),
+    # 6 virtual_left_limit_en
+    #   0 Position limit VIRT_STOP_LEFT disabled.
+    #   1 Position limit VIRT_STOP_LEFT enabled.
+    'VIRTUAL_LEFT_LIMIT_EN': Representation(6),
+    # 7 virtual_right_limit_en
+    #   0 Position limit VIRT_STOP_RIGHT disabled.
+    #   1 Position limit VIRT_STOP_RIGHT enabled.
+    'VIRTUAL_RIGHT_LIMIT_EN': Representation(7),
+    # 9:8 virt_stop_mode
+    #   0 Reserved.
+    #   1 Hard stop: VACTUAL is set to 0 on a virtual stop event.
+    #   2 Soft stop is enabled with linear velocity ramp (from VACTUAL to v = 0).
+    #   3 Reserved.
+    'VIRT_STOP_MODE': Representation(8, 9),
+    # 10 latch_x_on_inactive_l
+    #   0 No latch of XACTUAL if STOPL becomes inactive.
+    #   1 X_LATCH = XACTUAL is stored in the case STOPL becomes inactive.
+    'LATCH_X_ON_INACTIVE_L': Representation(10),
+    # 11 latch_x_on_active_l
+    #   0 No latch of XACTUAL if STOPL becomes active.
+    #   1 X_LATCH = XACTUAL is stored in the case STOPL becomes active.
+    'LATCH_X_ON_ACTIVE_L': Representation(11),
+    # 12 latch_x_on_inactive_r
+    #   0 No latch of XACTUAL if STOPR becomes inactive.
+    #   1 X_LATCH = XACTUAL is stored in the case STOPL becomes inactive.
+    'LATCH_X_ON_INACTIVE_R': Representation(12),
+    # 13 latch_x_on_active_r
+    #   0 No latch of XACTUAL if STOPR becomes active.
+    #   1 X_LATCH = XACTUAL is stored in the case STOPL becomes active.
+    'LATCH_X_ON_ACTIVE_R': Representation(13),
+    # 14 stop_left_is_home
+    #   0 STOPL input signal is not also the HOME position.
+    #   1 STOPL input signal is also the HOME position.
+    'STOP_LEFT_IS_HOME': Representation(14),
+    # 15 stop_right_is_home
+    #   0 STOPR input signal is not lso the HOME position.
+    #   1 STOPR input signal is also the HOME position.
+    'STOP_RIGHT_IS_HOME': Representation(15),
+    # 19:16 home_event
+    #   0 Next active N event of connected ABN encoder signal indicates HOME position.
+    #   2 HOME_REF = 1 indicates an active home event X_HOME is located at the rising edge of the active range.
+    #   3 HOME_REF = 0 indicates negative region / position from the home position.
+    #   4 HOME_REF = 1 indicates an active home event X_HOME is located at the falling edge of the active range.
+    #   6 HOME_REF = 1 indicates an active home event X_HOME is located in the middle of the active range.
+    #   9 HOME_REF = 0 indicates an active home event X_HOME is located in the middle of the active range.
+    #   11 HOME_REF = 0 indicates an active home event X_HOME is located at the rising edge of the active range.
+    #   12 HOME_REF = 1 indicates negative region / position from the home position.
+    #   13 HOME_REF = 0 indicates an active home event X_HOME is located at the falling edge of the active range.
+    'HOME_EVENT': Representation(16, 19),
+    # 20 start_home_tracking
+    #   0 No storage to X_HOME by passing home position.
+    #   1 Storage of XACTUAL as X_HOME at next regular home event.
+    #     An XLATCH_DONE event is released.
+    #     In case the event is cleared, start_home_tracking is reset automatically
+    'START_HOME_TRACKING': Representation(20),
+    # 21 clr_pos_at_target
+    #   0 Ramp stops at XTARGET if positioning mode is active.
+    #   1 Set XACTUAL = 0 after XTARGET has been reached.
+    #   The next ramp starts immediately.
+    'CLR_POS_AT_TARGET': Representation(21),
+    # 22 circular_movement_en
+    #   0 Range of  XACTUAL is not limited: -2 31 ≤ XACTUAL ≤ 2 31 - 1
+    #   1 Range of XACTUAL is limited by X_RANGE: -X_RANGE ≤ XACTUAL ≤ X_RANGE - 1
+    'CIRCULAR_MOVEMENT_EN': Representation(22),
+    # 24:23 pos_comp_output
+    #   0 TARGET_REACHED is set active on TARGET_REACHED_Flag.
+    #   1 TARGET_REACHED is set active on VELOCITY_REACHED_Flag.
+    #   2 TARGET_REACHED is set active on ENC_FAIL flag.
+    #   3 TARGET_REACHED triggers on POSCOMP_REACHED_Flag.
+    'POS_COMP_OUTPUT': Representation(23, 24),
+    # 25 pos_comp_source
+    #   0 POS_COMP is compared to internal position XACTUAL.
+    #   1 POS_COMP is compared with external position ENC_POS.
+    'POS_COMP_SOURCE': Representation(25),
+    # 26 stop_on_stall
+    #   0 SPI and S / D output interface remain active in case of an stall event.
+    #   1 SPI and S / D output interface stops motion in case of an stall event (hard stop).
+    'STOP_ON_STALL': Representation(26),
+    # 27 drv_after_stall
+    #   0 No further motion in case of an active stop-on-stall event.
+    #   1 Motion is possible in case of an active stop-on-stall event and after the stop-on-stall event is reset.
+    'DRV_AFTER_STALL': Representation(27),
+    # 29:28 modified_pos_compare:
+    #       POS_COMP_REACHED_F / event is based on comparison between XACTUAL resp.ENC_POS and
+    #   0 POS_COMP
+    #   1 X_HOME
+    #   2 X_LATCH resp.ENC_LATCH
+    #   3 REV_CNT
+    'MODIFIED_POS_COMPARE': Representation(28, 29),
+    # 30 automatic_cover
+    #   0 SPI output interface will not transfer automatically any cover datagram.
+    #   1 SPI output interface sends automatically cover datagrams when VACTUAL crosses SPI_SWITCH_VEL.
+    'AUTOMATIC_COVER': Representation(30),
+    # 31 circular_enc_en
+    #   0 Range of ENC_POS is not limited: -2 31 ≤ ENC_POS ≤ 2 31 - 1
+    #   1 Range of ENC_POS is limited by X_RANGE: -X_RANGE ≤ ENC_POS ≤ X_RANGE –1
+    'CIRCULAR_ENC_EN': Representation(31)
+  })
+
 class XActualRegister(Register):
   REGISTER = 0x21
   bits = AttributeDict({

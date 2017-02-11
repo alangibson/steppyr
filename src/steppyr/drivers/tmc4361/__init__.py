@@ -28,6 +28,7 @@ class TMC4361Driver(Driver):
     self.tmc26x = TMC26XDriver(spi=TMC26xCoverSPI(self._spi), dir_pin=0, step_pin=0, current=300, resistor=150)
     # Initialize Registers with defaults
     self._registers = {
+      ReferenceConfRegister: ReferenceConfRegister(),
       SpiStatusSelectionRegister: SpiStatusSelectionRegister(),
       SPIOutConfRegister: SPIOutConfRegister(),
       GeneralConfigurationRegister: GeneralConfigurationRegister()\
