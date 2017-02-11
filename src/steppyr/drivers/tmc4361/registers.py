@@ -1076,7 +1076,7 @@ class StartSineRegister(Register):
     # W 23:16 START_SIN90_120(Default: 0xF7)
     # Start value for cosine waveform.
     'START_SIN90_120': Representation(16, 23),
-    # W 31:24
+    # W 31:24GEAR_RATIO
     # 2nd assignment: Also used as DAC_OFFSET for write access(see section 19.30.)
     'DAC_OFFSET': Representation(24, 31)
   })

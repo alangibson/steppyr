@@ -57,7 +57,7 @@ class TMC4361Driver(Driver):
       StatusEventRegister: StatusEventRegister()\
         .set(StatusEventRegister.bits.TARGET_REACHED)
         .set(StatusEventRegister.bits.POS_COMP_REACHED),
-      CurrentScaleValuesRegister: CurrentScaleValuesRegister(),
+      CurrentScaleValuesRegister: CurrentScaleValuesRegister()
       #StandbyDelayRegister: StandbyDelayRegister(),
       #FreewheelDelayRegister: FreewheelDelayRegister(),
       #VDRVScaleLimitRegister: VDRVScaleLimitRegister(),
@@ -379,7 +379,7 @@ class TMC4361Driver(Driver):
     self._registers[DFinalRegister].set(DFinalRegister.bits.DFINAL, d_final)
     self.flush_registers()
 
-  def set_ramp_none(self):
+  def set_ramp_none(self, target_speed):
     """
     Motion profile No Ramp follows VMAX only (rectangular velocity shape).
 
@@ -406,6 +406,7 @@ class TMC4361Driver(Driver):
       .set(RampModeRegister.bits.MOTION_PROFILE, 0) # no ramp
       .set(RampModeRegister.bits.OPERATION_MODE, 1) # positioning mode
     )
+    self._registers[VMaxRegister].set(VMaxRegister.bits.VMAX, target_speed)
 
   def set_ramp_trapezoid(self, target_speed, target_acceleration, target_deceleration,
       motion_profile=1, operation_mode=1, v_break=0,
