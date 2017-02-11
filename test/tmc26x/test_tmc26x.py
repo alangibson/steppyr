@@ -1,9 +1,17 @@
 import logging, unittest
 from steppyr.drivers.tmc26x.spi import SPI
-from steppyr.drivers.tmc26x import TMC26XDriver
+from steppyr.drivers.tmc26x import TMC26XDriver, ChopperControllRegister
 
 logging.basicConfig(level=logging.DEBUG)
 log = logging.getLogger(__name__)
+
+def dump_registers(tmc26x, exclude_zero=False):
+  for register_class, register in tmc26x._registers.items():
+    for name, representation in register.bits.items():
+      value = register.get(representation)
+      if exclude_zero and not value:
+        continue
+      log.debug('    %s %s', name, value)
 
 class TestSuite(unittest.TestCase):
   def test_1(self):
@@ -13,11 +21,13 @@ class TestSuite(unittest.TestCase):
     # When
     tmc26x.activate()
     # Then
-    print('driver_control_register', tmc26x.driver_control_register.get_all_values())
-    print('chopper_config_register', tmc26x.chopper_config_register.get_all_values())
-    print('cool_step_register', tmc26x.cool_step_register.get_all_values())
-    print('stall_guard2_register', tmc26x.stall_guard2_register.get_all_values())
-    print('driver_config_register', tmc26x.driver_config_register.get_all_values())
+    dump_registers(tmc26x)
+
+  def test_load_registers_from_ini(self):
+    driver = TMC26XDriver(spi=None, dir_pin=0, step_pin=0)
+    driver.load_registers_from_ini('test/tmc26x/data/20170210_02.56.32_TMC26x_Settings.ini')
+    dump_registers(driver, exclude_zero=False)
+    self.assertEqual(driver._registers[ChopperControllRegister].data, 0x91935 & 0b11111111111111111)
 
 if __name__ == '__main__':
   unittest.main()

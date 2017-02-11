@@ -1,5 +1,7 @@
 import logging
 import RPi.GPIO as GPIO
+
+from steppyr.lib.bits import mask
 from steppyr.lib.functions import constrain
 from steppyr.lib.trinamic import MICROSTEP_RESOLUTION, parse_ini
 from steppyr.drivers.stepdir import StepDirDriver
@@ -143,10 +145,14 @@ class TMC26XDriver(StepDirDriver):
 
   def load_registers_from_ini(self, path):
     for register_code, register_value in parse_ini(path):
+      fixed_register_code = register_code & 0b111
       # Look up register
       for register_class, register in self._registers.items():
-        if register_class.REGISTER == register_code:
-          self._registers[register_class] = register_class(register_value)
+        if register_class.REGISTER == fixed_register_code:
+          # Chop header off of register value
+          bitmask = mask(0, (register._datagram_len - register._header_len)-1)
+          fixed_register_value = register_value & bitmask
+          self._registers[register_class] = register_class(fixed_register_value)
 
   #
   # Driver API methods
