@@ -26,11 +26,12 @@ class TMC4361Driver(Driver):
     self._pin_mode = pin_mode
     # Initialize TMC26x driver
     self.tmc26x = TMC26XDriver(spi=TMC26xCoverSPI(self._spi), dir_pin=0, step_pin=0, current=300, resistor=150)
-    # Initialize Registers
+    # Initialize Registers with defaults
     self._registers = {
       SpiStatusSelectionRegister: SpiStatusSelectionRegister(),
       SPIOutConfRegister: SPIOutConfRegister(),
-      GeneralConfigurationRegister: GeneralConfigurationRegister(),
+      GeneralConfigurationRegister: GeneralConfigurationRegister()\
+        .set(GeneralConfigurationRegister.bits.POL_DIR_OUT),
       RampModeRegister: RampModeRegister(),
       ExternalClockFrequencyRegister: ExternalClockFrequencyRegister(clock_frequency),
       MotorDriverSettingsRegister: MotorDriverSettingsRegister(),
@@ -51,7 +52,9 @@ class TMC4361Driver(Driver):
       VActualRegister: VActualRegister(),
       XTargetRegister: XTargetRegister(),
       StatusFlagRegister: StatusFlagRegister(),
-      StatusEventRegister: StatusEventRegister(),
+      StatusEventRegister: StatusEventRegister()\
+        .set(StatusEventRegister.bits.TARGET_REACHED)
+        .set(StatusEventRegister.bits.POS_COMP_REACHED),
       CurrentScaleValuesRegister: CurrentScaleValuesRegister(),
       StandbyDelayRegister: StandbyDelayRegister(),
       FreewheelDelayRegister: FreewheelDelayRegister(),
@@ -88,15 +91,13 @@ class TMC4361Driver(Driver):
   def load_register_value(self, register_key, value_key):
     return self.load_register(register_key).get(value_key)
 
-  def load_registers_from_ini(self, path, device='tmc4361'):
+  def load_registers_from_ini(self, path):
     for register_code, register_value in parse_ini(path):
       # Look up register
-      if device == 'tmc4361':
-        for register_class, register in self._registers.items():
-          if register_class.REGISTER == register_code:
-            self._registers[register_class] = register_class(register_value)
-      elif device == 'tmc26x':
-        log.warning('TODO implement tmc26x')
+      for register_class, register in self._registers.items():
+        if register_class.REGISTER == register_code:
+          self._registers[register_class] = register_class(register_value)
+
   #
   # Driver API methods
   #
@@ -113,16 +114,6 @@ class TMC4361Driver(Driver):
     if self._reset_pin:
       GPIO.setup(self._reset_pin, GPIO.OUT)
     self.reset(hard=True)
-    # TODO move this to initialzation block in __init__
-    # Select the events we want reported with every status code.
-    # see datasheet 19.13-19.14
-    self._spi.write(self._registers[StatusEventRegister]
-      .set(StatusEventRegister.bits.TARGET_REACHED)
-      .set(StatusEventRegister.bits.POS_COMP_REACHED)
-    )
-    self._spi.write(self._registers[GeneralConfigurationRegister]
-      .set(GeneralConfigurationRegister.bits.POL_DIR_OUT)
-    )
     # We need to write our current register values to the TMC4361 since we just
     # wiped them all out on the chip due to reset.
     self.flush_registers()
@@ -393,9 +384,9 @@ class TMC4361Driver(Driver):
       .set(RampModeRegister.bits.OPERATION_MODE, 1) # positioning mode
     )
 
-  def set_ramp_trapezoid(self, v_max, a_max, d_max,
-    motion_profile=1, operation_mode=1, v_break=0,
-    v_start=0, v_stop=0):
+  def set_ramp_trapezoid(self, target_speed, target_acceleration, target_deceleration,
+      motion_profile=1, operation_mode=1, v_break=0,
+      v_start=0, v_stop=0):
     """
     Consideration of acceleration and deceleration values
     without adaptation of these acceleration values.
@@ -420,10 +411,10 @@ class TMC4361Driver(Driver):
     self._registers[RampModeRegister]\
       .set(RampModeRegister.bits.MOTION_PROFILE, motion_profile)\
       .set(RampModeRegister.bits.OPERATION_MODE, operation_mode)
-    self._registers[VMaxRegister].set(VMaxRegister.bits.VMAX, v_max)
+    self._registers[VMaxRegister].set(VMaxRegister.bits.VMAX, target_speed)
     self._registers[VBreakRegister].set(VBreakRegister.bits.VBREAK, 0)
-    self._registers[AMaxRegister].set(AMaxRegister.bits.AMAX, a_max)
-    self._registers[DMaxRegister].set(DMaxRegister.bits.DMAX, d_max)
+    self._registers[AMaxRegister].set(AMaxRegister.bits.AMAX, target_acceleration)
+    self._registers[DMaxRegister].set(DMaxRegister.bits.DMAX, target_deceleration)
     self._registers[VStartRegister].set(VStartRegister.bits.VSTART, v_start)
     self._registers[VStopRegister].set(VStopRegister.bits.VSTOP, v_stop)
     self.flush_registers()
@@ -478,6 +469,8 @@ class TMC4361Driver(Driver):
     """
     return self.load_register(StatusEventRegister).get_values()
 
+  # TODO Update this unmainted code
+  '''
   def configureEndstop(self, left, active_high):
     """
     Arguments:
@@ -507,7 +500,10 @@ class TMC4361Driver(Driver):
         # _BV(12) //X_LATCH if stopr becomes inactive ..
         endstop_config |= 0 | _BV(1) | _BV(12)
     self.writeRegister(TMC4361_REFERENCE_CONFIG_REGISTER, endstop_config)
+  '''
 
+  # TODO Update this unmainted code
+  '''
   def configureVirtualEndstop(self, left, positions):
     """
     Arguments:
@@ -527,7 +523,10 @@ class TMC4361Driver(Driver):
       # we doe not latch since we know where they are??
     self.writeRegister(TMC4361_REFERENCE_CONFIG_REGISTER, endstop_config)
     self.writeRegister(position_register, positions)
+  '''
 
+  # TODO Update this unmainted code
+  '''
   def getClearedEndStopConfig(self):
     """
     Arguments:
@@ -549,6 +548,7 @@ class TMC4361Driver(Driver):
     clearing_pattern = ~ clearing_pattern
     endstop_config &= clearing_pattern
     return endstop_config
+  '''
 
   def reset(self, hard=False):
     if hard and self._reset_pin:

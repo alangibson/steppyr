@@ -141,38 +141,51 @@ class TMC26XDriver(StepDirDriver):
     for register in self._registers.values():
       self._spi.write(register)
 
+  def load_registers_from_ini(self, path):
+    for register_code, register_value in parse_ini(path):
+      # Look up register
+      for register_class, register in self._registers.items():
+        if register_class.REGISTER == register_code:
+          self._registers[register_class] = register_class(register_value)
+
+  #
+  # Driver API methods
+  #
+
   def activate(self):
     # set the current
-    self.set_current(self._current_ma)
+    # self.set_current(self._current_ma)
     # set to a conservative start value
-    self.set_constant_off_time_chopper(
-      constant_off_time=7,
-      blank_time=54,
-      fast_decay_time_setting=13,
-      sine_wave_offset=12,
-      use_current_comparator=1)
+    # self.set_constant_off_time_chopper(
+    #   constant_off_time=7,
+    #   blank_time=54,
+    #   fast_decay_time_setting=13,
+    #   sine_wave_offset=12,
+    #   use_current_comparator=1)
     # set a nice microstepping value
-    self.set_microsteps(self._microsteps)
+    # self.set_microsteps(self._microsteps)
     # Send configuration to the driver chip
     # self._spi.write(self.driver_control_register)
     # self._spi.write(self.chopper_config_register)
     # self._spi.write(self.cool_step_register)
     # self._spi.write(self.stall_guard2_register)
     # self._spi.write(self.driver_config_register)
-    self.flush_registers()
     self._started = True
+    self.flush_registers()
     super().activate()
 
   def shutdown(self):
     super().shutdown()
     self.disable()
+    self._started = False
 
   def enable(self):
     """ Enable hardware (possibly temporarily) """
-    self._registers[ChopperControllRegister].set(ChopperControllRegister.bits.TOFF, self.constant_off_time)
+    # self._registers[ChopperControllRegister].set(ChopperControllRegister.bits.TOFF, self.constant_off_time)
     # if not enabled we don't have to do anything since we already delete t_off from the register
     if self._started:
       # self._spi.write(self.chopper_config_register)
+      # We are assuing that Chopper settings have already been set
       self._spi.write(self._registers[ChopperControllRegister])
 
   def disable(self):

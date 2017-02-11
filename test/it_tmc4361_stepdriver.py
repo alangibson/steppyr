@@ -25,7 +25,7 @@ stepper.activate()
 stepper.set_microsteps(1)
 # driver.set_target_speed(100)
 # driver.set_target_acceleration(10)
-stepper.profile.set_ramp_trapezoid(v_max=100, a_max=10, d_max=10)
+stepper.profile.set_ramp_trapezoid(target_speed=100, target_acceleration=10, target_deceleration=10)
 #driver.profile.set_ramp_scurve(
 #  v_max=10000, a_max=100*10, d_max=100*10,
 #  bow1, bow2, bow3, bow4,
