@@ -1,9 +1,9 @@
 import logging
 import RPi.GPIO as GPIO
-from RaspberryPiStepperDriver import tobin, set_bit, unset_bit, constrain
-from .registers import *
-from RaspberryPiStepperDriver.activators.stepdir import StepDirActivator
-from RaspberryPiStepperDriver.lib.trinamic import MICROSTEP_RESOLUTION
+from steppyr.lib.functions import constrain
+from steppyr.lib.trinamic import MICROSTEP_RESOLUTION
+from steppyr.drivers.stepdir import StepDirDriver
+from steppyr.drivers.tmc26x.registers import *
 
 """
 Ported to Python from https://github.com/trinamic/TMC26XStepper
@@ -95,7 +95,7 @@ CHOPPER_CONFIG_REGISTER = {
   'T_OFF_TIMING_PATERN': 0XF
   }
 
-class TMC26XActivator(StepDirActivator):
+class TMC26XDriver(StepDirDriver):
 
   def __init__(self, spi, dir_pin, step_pin, pin_mode=GPIO.BCM, current=300, resistor=150):
     """
@@ -130,7 +130,7 @@ class TMC26XActivator(StepDirActivator):
     self.stall_guard2_register = StallGuard2ControlRegister()
     self.driver_config_register = DriverConfigRegister()
 
-  def start(self):
+  def activate(self):
     # set the current
     self.set_current(self._current_ma)
     # set to a conservative start value
@@ -149,10 +149,10 @@ class TMC26XActivator(StepDirActivator):
     self._spi.write(self.stall_guard2_register)
     self._spi.write(self.driver_config_register)
     self._started = True
-    super().start()
+    super().activate()
 
-  def stop(self):
-    super().stop()
+  def shutdown(self):
+    super().shutdown()
     self.disable()
 
   def enable(self):

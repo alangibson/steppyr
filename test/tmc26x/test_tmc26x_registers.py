@@ -1,5 +1,5 @@
 import unittest
-from RaspberryPiStepperDriver.activators.tmc26x.registers import *
+from steppyr.drivers.tmc26x.registers import *
 
 class TestSuite(unittest.TestCase):
   def test_Register_1(self):

@@ -2,7 +2,6 @@
 
 export PYTHONPATH=$PWD/src:$PWD/test/mock
 
-
 if [[ -x gpio ]]; then
   gpio mode 7 clock
   gpio clock 7 1600000

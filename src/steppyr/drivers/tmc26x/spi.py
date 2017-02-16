@@ -1,4 +1,4 @@
-from RaspberryPiStepperDriver.activators import spi as activator_spi
+from steppyr.drivers import spi as activator_spi
 
 class SPI(activator_spi.SPI):
 

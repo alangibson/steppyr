@@ -1,4 +1,4 @@
-from RaspberryPiStepperDriver import micros
+from steppyr.lib.functions import micros
 from . import RampProfile, calc_step_interval_us, calc_speed_from_step_interval, calc_direction
 
 """
@@ -19,7 +19,7 @@ class RectangleProfile(RampProfile):
     self._step_interval_us = calc_step_interval_us(self._target_speed)
     # Derive current speed from _step_interval_us
     self._current_speed = calc_speed_from_step_interval(self._step_interval_us)
-    self._direction = calc_direction(self.distance_to_go)
+    self._direction = calc_direction(self.steps_to_go)
     self._next_step_time_us = micros() + self._step_interval_us
 
   """
@@ -31,7 +31,7 @@ class RectangleProfile(RampProfile):
     "
     if self.motor_steps and self.microsteps and self.rpm:
       self.step_pulse_us = 60 * 1000000 / self.motor_steps / self.microsteps / self.rpm
-      log.debug('base.StepperDriver calculated step pulse %s us, motor_steps %s, microsteps %s, rpm %s',
+      log.debug('base.StepperController calculated step pulse %s us, motor_steps %s, microsteps %s, rpm %s',
         self.step_pulse_us, self.motor_steps, self.microsteps, self.rpm)
       # We currently try to do a 50% duty cycle so it's easy to see.
       # Other option is step_high_min, pulse_duration-step_high_min.

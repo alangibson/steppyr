@@ -1,39 +1,42 @@
 import asyncio, logging
-from RaspberryPiStepperDriver import DIRECTION_CW, DIRECTION_CCW, micros
 
 log = logging.getLogger(__name__)
+
+DIRECTION_NONE = -1 # Stationary
+DIRECTION_CCW = 0   # Clockwise
+DIRECTION_CW  = 1   # Counter-Clockwise
 
 def calc_degrees_to_steps(degrees, motor_steps_per_rev, microsteps):
   return degrees * motor_steps_per_rev * microsteps / 360
 
-class StepperDriver:
+class StepperController:
   """
   This API is based on AccelStepper (http://www.airspayce.com/mikem/arduino/AccelStepper).
   """
 
-  def __init__(self, activator, profile):
-    self._activator = activator
+  def __init__(self, driver, profile):
+    self._driver = driver
     self._profile = profile
 
-  def start(self):
+  def activate(self):
     """
     Must be called before using this driver.
     Implementing classes should use this method to initialize the hardware.
     """
-    self._activator.start()
+    self._driver.activate()
 
-  def stop(self):
+  def shutdown(self):
     """
     Must be called when this driver is no longer needed.
     Implementing classes should use this method to deactivate the hardware.
     """
-    self._activator.stop()
+    self._driver.shutdown()
 
-  def abort(self):
+  def stop(self):
     """
     Immediately stop the current move.
     """
-    self._profile.set_current_position(self._profile.current_steps)
+    self._profile.stop()
 
   def move(self, relative_steps):
     """
@@ -52,7 +55,7 @@ class StepperDriver:
     """
     Rotate motor a given number of degrees.
     """
-    self.move(calc_degrees_to_steps(degrees, self._profile.motor_steps_per_rev, self._profile.microsteps))
+    self.move(calc_degrees_to_steps(degrees, self._profile.full_steps_per_rev, self._profile.microsteps))
 
   async def run_forever(self):
     """
@@ -80,14 +83,11 @@ class StepperDriver:
     """
     # Dont do anything unless we actually have a step interval
     # and dont do anything unless we have somewhere to go
-    # if not self._profile.step_interval_us or not self._profile.distance_to_go:
-    #   return False
-
     if self._profile.should_step():
       # It is time to do a step
 
       # Tell the activator to take a step in a given direction
-      self._activator.step(self._profile.direction)
+      self._driver.step(self._profile.direction)
 
       # Tell profile we are taking a step
       self._profile.step()
@@ -104,37 +104,36 @@ class StepperDriver:
     while self._profile.is_moving:
       await asyncio.sleep(0)
 
-  def reset_step_counter(self):
-    self._profile.set_current_position(0)
-
-  def predict_distance_to_go(self, target_steps):
+  def next_steps_to_go(self, target_steps):
     """
     Convenience function for any code that may want to know how many steps we will go
     """
     return target_steps - self._profile.current_steps
 
-  def predict_direction(self, target_steps):
+  def next_direction(self, target_steps):
     """
     Convenience function for any code that may want to know what direction we would travel
     """
-    return DIRECTION_CW if self.predict_distance_to_go(target_steps) > 0 else DIRECTION_CCW
-
-  def set_microsteps(self, microsteps):
-    self._activator.set_microsteps(microsteps)
-    self._profile.set_microsteps(microsteps)
-    self._profile.compute_new_speed()
+    return DIRECTION_CW if self.next_steps_to_go(target_steps) > 0 else DIRECTION_CCW
 
   @property
   def activator(self):
-    return self._activator
+    return self._driver
 
   @property
   def profile(self):
     return self._profile
 
   #
-  # Proxy profile methods
+  # Proxy methods
   #
+
+  def step(self, direction):
+    self._driver.step(self._profile.direction)
+
+  def set_microsteps(self, microsteps):
+    self._driver.set_microsteps(microsteps)
+    self._profile.set_microsteps(microsteps)
 
   def set_target_speed(self, speed):
     """
@@ -145,15 +144,23 @@ class StepperDriver:
     """
     self._profile.set_target_speed(speed)
 
-  def set_current_position(self, position):
+  @property
+  def target_speed(self):
+    return self._profile.target_speed
+
+  @property
+  def current_speed(self):
+    return self._profile.current_speed
+
+  def set_current_steps(self, position):
     """
     Useful during initialisations or after initial positioning
     Sets speed to 0
     """
-    self._profile.set_current_position(position)
+    self._profile.set_current_steps(position)
 
   @property
-  def position(self):
+  def current_steps(self):
     return self._profile.current_steps
 
   @property
@@ -161,43 +168,31 @@ class StepperDriver:
     return self._profile.direction
 
   @property
-  def distance_to_go(self):
-    return self._profile.distance_to_go
+  def steps_to_go(self):
+    return self._profile.steps_to_go
 
   @property
   def is_moving(self):
     return self._profile.is_moving
 
   @property
-  def acceleration(self):
-    return self._profile.acceleration
+  def current_acceleration(self):
+    return self._profile.current_acceleration
 
-  def set_acceleration(self, acceleration):
+  def set_target_acceleration(self, acceleration):
     """
     Sets acceleration value in steps per second per second and computes new speed.
     Arguments:
       acceleration (float). Acceleration in steps per second per second.
     """
-    self._profile.set_acceleration(acceleration)
+    self._profile.set_target_acceleration(acceleration)
 
-  #
-  # Activator proxy methods
-  #
-
-  def step(self, direction):
-    log.debug('stepping: current_steps=%s direction=%s', self._profile.current_steps, self._profile.direction)
-    self._activator.step(self._profile.direction)
+  @property
+  def target_acceleration(self):
+    return self._profile.target_acceleration
 
   def set_pulse_width(self, pulse_width_us):
     """
     Set the step pulse width in microseconds.
     """
-    self._activator.set_pulse_width(pulse_width_us)
-
-  def enable(self):
-    """ Enable hardware (possibly temporarily) """
-    self._activator.enable()
-
-  def disable(self):
-    """ Disable hardware (possibly temporarily) """
-    self._activator.disable()
+    self._driver.set_pulse_width(pulse_width_us)

@@ -1,7 +1,7 @@
-from .stepdir import StepDirActivator
+from .stepdir import StepDirDriver
 import RPi.GPIO as GPIO
 
-class A4988Activator(StepDirActivator):
+class A4988Driver(StepDirDriver):
   """
   The A4988 provides a STEP/DIR interface and allows setting microstep
   resolution with the ms* pins.
@@ -29,8 +29,8 @@ class A4988Activator(StepDirActivator):
     self.ms2_pin = ms2_pin
     self.ms1_pin = ms1_pin
 
-  def start(self):
-    super().start()
+  def activate(self):
+    super().activate()
     GPIO.setup(ms1_pin, GPIO.OUT)
     GPIO.setup(ms2_pin, GPIO.OUT)
     GPIO.setup(ms3_pin, GPIO.OUT)
