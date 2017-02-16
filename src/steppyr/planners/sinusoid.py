@@ -80,7 +80,7 @@ class SinusoidPlan:
     """
     :param waves:
     :param controller:
-    :param sample_rate: in seconds
+    :param sample_rate: in seconds. 1/Hz
     """
     # An initialized instance of StepController
     self._controller = controller
@@ -88,6 +88,8 @@ class SinusoidPlan:
     # Equal to 2 x radius of unit circle
     # self._length_full_steps = length_full_steps
     self._last_y = 0
+    # Last timepoint
+    self._last_x = 0
     # self._length_steps = length_full_steps * microsteps
     # self._amplitude = self._length_steps / 2
     self._waves = waves
@@ -102,6 +104,7 @@ class SinusoidPlan:
   def _y(self):
     # Units of t must match units of f (preferably seconds)
     t = time.time() - self._start_time_sec
+    self._last_x = t
     # Calculate y based on time
     y = 0
     for wave_callable in self._waves:
