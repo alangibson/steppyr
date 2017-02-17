@@ -78,3 +78,15 @@ def datagram_to_int(datagram):
     # compute negative value
     value = value - (1 << bits)
   return value
+
+def decode_twos_complement(input_value, num_bits):
+	"""
+  Calculates a two's complement integer from the given input value's bits
+  https://en.wikipedia.org/wiki/Two's_complement
+  """
+	mask = 2**(num_bits - 1)
+	return -(input_value & mask) + (input_value & ~mask)
+
+# Convert floating point to/from fixed point
+number_to_fixed = lambda float_value, fractional_bits: int(float_value * (1 << fractional_bits))
+fixed_to_number = lambda fixed_value, fractional_bits: fixed_value * (2**-fractional_bits)

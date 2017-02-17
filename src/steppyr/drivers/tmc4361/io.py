@@ -1,38 +1,25 @@
-from steppyr.lib.bits import clear_bit, _BV, datagram_to_int
+from steppyr.lib.bits import clear_bit, _BV
+from steppyr.lib.trinamic import Datagram as TrinamicDatagram
 
 WRITE_MASK = 0x80 # register | WRITE_MASK
 READ_MASK = 0x7F # register & READ_MASK
 
-class Datagram:
+class Datagram(TrinamicDatagram):
 
-  def __init__(self, header, data):
+  def __init__(self, header, data, header_len=8, datagram_len=40):
     """
     header: 8 bit status or register int
     data: 32 bit message data
     """
-    self._header = header
-    if hasattr(data, '__iter__'):
-      self._data = datagram_to_int(data)
-    else:
-      self._data = data
+    super().__init__(header=header, data=data, header_len=header_len, datagram_len=datagram_len)
+    # TMC4361 only
     self._is_read = True
-
-  @property
-  def datagram(self):
-    return (self._header << 32) | self._data
-
-  @property
-  def header(self):
-    return self._header
-
-  @property
-  def data(self):
-    return self._data
 
   def to_list(self):
     """
     Returns entire datagram (header+data) as a list of 5 8-bit ints.
     """
+    # TMC4361 only: datagram is 5 separate bytes
     datagram_list = [
       self._header,
       (self._data >> 24) & 0xff,
@@ -48,7 +35,7 @@ class Datagram:
 
   @property
   def register(self):
-    # clear MSB (#7) because this is the read/write bit
+    # TMC4361 only: clear MSB (#7) because this is the read/write bit
     return clear_bit(self._header, 7)
 
   def set_write(self):
@@ -86,12 +73,6 @@ class Datagram:
     SPI_STATUS_SELECTION register.
     """
     return self._header
-
-  def as_response(self, datagram_list):
-    """
-    Clone ourselves as a response.
-    """
-    return type(self)(datagram_to_int(datagram_list))
 
 class Status:
   """

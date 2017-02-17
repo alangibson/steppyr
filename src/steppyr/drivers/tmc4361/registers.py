@@ -1,8 +1,9 @@
 """
 registers for TMC4361
 """
-from steppyr.lib.bits import unset_bit, set_bit, get_bits, mask, _BV, lsb
-from steppyr.drivers.tmc4361.io import Datagram
+from steppyr.lib import AttributeDict
+from steppyr.lib.trinamic import Representation, Register as TrinamicRegister
+from .io import Datagram
 
 WRITE_MASK = 0x80 # register | WRITE_MASK
 READ_MASK = 0x7F # register & READ_MASK
@@ -12,206 +13,135 @@ READ_MASK = 0x7F # register & READ_MASK
 FIXED_23_8_MAKE = lambda a: a * (1 << 8)
 FIXED_22_2_MAKE = lambda a: a * (1 << 2)
 
-def decode_twos_complement(input_value, num_bits):
-	"""
-  Calculates a two's complement integer from the given input value's bits
-  https://en.wikipedia.org/wiki/Two's_complement
-  """
-	mask = 2**(num_bits - 1)
-	return -(input_value & mask) + (input_value & ~mask)
+class Register(TrinamicRegister, Datagram):
+  def __init__(self, data=0, header=None, header_len=8, datagram_len=40):
+    super().__init__(data=data, header=header, header_len=header_len, datagram_len=datagram_len)
 
-# Convert floating point to/from fixed point
-number_to_fixed = lambda float_value, fractional_bits: int(float_value * (1 << fractional_bits))
-fixed_to_number = lambda fixed_value, fractional_bits: fixed_value * (2**-fractional_bits)
-
-class AttributeDict(dict):
-  __getattr__ = dict.__getitem__
-  __setattr__ = dict.__setitem__
-
-class Representation:
-  """
-  Value Representation
-
-  Valid use:
-  Representation(5) = _BV(5)
-  Representation(0, 10) = mask(0, 10)
-  Representation(0, 15, 16) = unsigned 16bit int in register bits 0:15
-  Representation(0, 15, 8, 8, True) = signed (twos-compliment) 8bit.8bit float
-    in register bits 0:15
-
-  Fixed Point Math on the Arduino Platform
-    https://ucexperiment.wordpress.com/2012/10/28/fixed-point-math-on-the-arduino-platform/
-  """
-  def __init__(self, first_bit, last_bit=None, whole_bits=None, fractional_bits=0, signed=False):
-    """
-    first_bit: lsb
-    last_bit: msb
-    """
-    self._first_bit = first_bit
-    if last_bit == None:
-      # When last_bit == None, we are acting like _BV
-      last_bit = first_bit
-    self._last_bit = last_bit
-    self.bitmask = mask(first_bit, last_bit)
-    if whole_bits == None:
-      # When whole_bits == None, we are acting like mask() or _BV()
-      self._whole_bits = last_bit + 1 # first/last_bit is 0 indexed
-    else:
-      self._whole_bits = whole_bits
-    self._fractional_bits = fractional_bits
-    self._signed = signed
-
-  def to_register_value(self, number):
-    """
-    Returns number encoded so that it can be directly ORed onto register data.
-    1. Convert floating point to fixed point. Int remains unchanged.
-    2. TODO Convert fixed point to twos-compliment. Positive remains unchanged.
-    3. Left shift until lsb is same index as first_bit.
-    """
-    # Convert to fixed point
-    value = number_to_fixed(number, self._fractional_bits)
-    # Left shift until lsb is same index as first_bit.
-    value = value << self._first_bit
-    return value
-
-  def from_register_value(self, register_value):
-    # Apply bitmask to extract bits from encoded register value
-    value = get_bits(register_value, self.bitmask)
-    # FIXME handle case where self._last_bit > whole_bits + fractional_bits
-    # test case: test_mismatch
-    # Handle signed
-    if self._signed:
-      value = decode_twos_complement(value, self._whole_bits + self._fractional_bits)
-    # Convert fixed point to floating point or int
-    return fixed_to_number(value, self._fractional_bits)
-
-class Register(Datagram):
-
-  def __init__(self, data=0):
-    self._header = self.REGISTER
-    self._data = data
-
-  def set(self, representation, value=None):
-    """
-    value: (int or float) If float, a Representation is needed to encode to
-           valid register value.
-    bitmask can be
-    1. integer bitmask (or really any integer)
-    # Disabled: 2. dict like: {bitmask: mask(0, 30), representation: Representation(23, 8, False)}
-    """
-    if value == None:
-      # If we have no value, just apply the bitmask. Usefull for setting bit flags.
-      self._data = set_bit(self._data, representation.bitmask)
-    else:
-      # Encode value to register value using Representation
-      value = representation.to_register_value(value)
-      # Apply value at bitmask bits to register data
-      self._data = set_bit(unset_bit(self._data, representation.bitmask), value)
-    return self
-
-  def unset(self, bitmask):
-    self._data = unset_bit(self._data, bitmask)
-    return self
-
-  def get(self, representation):
-    return representation.from_register_value(self._data)
-
-  def get_values(self):
-    events = []
-    for name, representation in self.bits.items():
-      value = self.get(representation)
-      if value:
-        events.append((name, value))
-    return events
-
-# Reference Switch Configuration Register
-TMC4361_REFERENCE_CONFIG_REGISTER = 0x01
-# RW. Start Switch Configuration Register
-# Bit 4:0. start_en
-#   xxxx1 Alteration of XTARGET value requires distinct start signal.
-#   xxx1x Alteration of VMAX value requires distinct start signal.
-#   xx1xx Alteration of RAMPMODE value requires distinct start signal.
-#   x1xxx Alteration of GEAR_RATIO value requires distinct start signal.
-#   1xxxx Shadow Register Feature Set is enabled.
-# Bit 8:5. trigger_events
-#   0000 Timing feature set is disabled because start signal generation is disabled.
-#   xxx0 START pin is assigned as output.
-#   xxx1 External start signal is enabled as timer trigger. START pin is assigned as input.
-#   xx1x TARGET_REACHED event is assigned as start signal trigger.
-#   x1xx VELOCITY_REACHED event is assigned as start signal trigger.
-#   1xxx POSCOMP_REACHED event is assigned as start signal trigger
-# Bit 9. pol_start_signal
-#   0 START pin is low active (input resp. output).
-#   1 START pin is high active (input resp. output).
-# Bit 10. immediate_start_in
-#   0 Active START input signal starts internal start timer.
-#   1 Active START input signal is executed immediately.
-# Bit 11. busy_state_en
-#   0 START pin is only assigned as input or output.
-#   1 Busy start state is enabled. START pin is assigned as input with a weakly driven active start polarity or as output with a strongly driven inactive start polarity.
-# Bit 15:12. pipeline_en
-#   0000 No pipelining is active.
-#   xxx1 X_TARGET is considered for pipelining.
-#   xx1x POS_COMP is considered for pipelining.
-#   x1xx GEAR_RATIO is considered for pipelining.
-#   1xxx GENERAL_CONF is considered for pipelining.
-# Bit 17:16. shadow_option
-#   0 Single-level shadow registers for 13 relevant ramp parameters.
-#   1 Double-stage shadow registers for S-shaped ramps.
-#   2 Double-stage shadow registers for trapezoidal ramps (excl. VSTOP).
-#   3 Double-stage shadow registers for trapezoidal ramps (excl. VSTART).
-# Bit 18. cyclic_shadow_regs
-#   0 Current ramp parameters are not written back to the shadow register.
-#   1 Current ramp parameters are written back to the appropriate shadow register.
-# Bit 19: Reserved. Set to 0.
-# Bit 23:20. SHADOW_MISS_CNT
-#   U Number of unused start internal start signals between two consecutive shadow register transfers.
-# Bit 31:24. XPIPE_REWRITE_REG
-#   Current assigned pipeline registers – START_CONF(15:12) – are written back to
-#     X_PIPEx in the case of an internal start signal generation and if assigned in this
-#     register with a ‘1’:
-TMC4361_START_CONFIG_REGISTER = 0x2
-TMC4361_ENCODER_INPUT_CONFIG_REGISTER = 0x07
-TMC4361_EVENT_CLEAR_CONF_REGISTER = 0x0c
-TMC4361_INTERRUPT_CONFIG_REGISTER = 0x0d
-# Various Configuration Registers: S/D, Synchronization, etc.
-TMC4361_STP_LENGTH_ADD_REGISTER = 0x10
-TMC4361_START_OUT_ADD_REGISTER = 0x11
-TMC4361_GEAR_RATIO_REGISTER = 0x12
-# RW. Bits 31:0. START_DELAY.
-#   Delay time [# clock cycles] between start trigger and internal start signal release.
-TMC4361_START_DELAY_REGISTER = 0x13
-# Target and Compare Registers
-TMC4361_POSITION_COMPARE_REGISTER = 0x32
-TMC4361_VIRTUAL_STOP_LEFT_REGISTER = 0x33
-TMC4361_VIRTUAL_STOP_RIGHT_REGISTER = 0x34
-TMC4361_X_LATCH_REGISTER = 0x36
-TMC4361_X_TARGET_PIPE_0_REGSISTER = 0x38
-# Shadow Register
-#   Some applications require a complete new ramp parameter set for a specific ramp
-#   situation / point in time. TMC4361A provides up to 14 shadow registers, which
-#   are loaded into the corresponding ramp parameter registers after an internal
-#   start signal is generated.
-# RW. Bit 31:0. Val S. SH_REG0 (Default: 0x00000000) : 1st shadow register.
-TMC4361_SH_V_MAX_REGISTER = 0x40
-# RW. Bit 31:0. Val U. SH_REG1 (Default: 0x00000000) : 2nd shadow register
-TMC4361_SH_A_MAX_REGISTER = 0x41
-TMC4361_SH_D_MAX_REGISTER = 0x42
-TMC4361_SH_VBREAK_REGISTER = 0x45
-TMC4361_SH_V_START_REGISTER = 0x46
-TMC4361_SH_V_STOP_REGISTER = 0x47
-TMC4361_SH_BOW_1_REGISTER = 0x48
-TMC4361_SH_BOW_2_REGISTER = 0x49
-TMC4361_SH_BOW_3_REGISTER = 0x4A
-TMC4361_SH_BOW_4_REGISTER = 0x4B
-TMC4361_SH_RAMP_MODE_REGISTER = 0x4C
-TMC4361_ENCODER_POSITION_REGISTER = 0x50
-TMC4361_ENCODER_INPUT_RESOLUTION_REGISTER = 0x54
-TMC4361_COVER_HIGH_REGISTER = 0x6D
-TMC4361_COVER_DRV_HIGH_REGISTER = 0x6F
-# how to mask REFERENCE_CONFIG_REGISTER if you want to configure just one end
-TMC4361_LEFT_ENDSTOP_REGISTER_PATTERN = (_BV(0) | _BV(2) | _BV(6) | _BV(10) | _BV(11) | _BV(14))
-TMC4361_RIGHT_ENDSTOP_REGISTER_PATTERN = (_BV(1) | _BV(3) | _BV(7) | _BV(12) | _BV(13) | _BV(15))
+class ReferenceConfRegister(Register):
+  REGISTER = 0x01
+  bits = AttributeDict({
+    # 0 stop_left_en
+    #   0 STOPL signal processing disabled.
+    #   1 STOPL signal processing enabled.
+    'STOP_LEFT_EN': Representation(0),
+    # 1 stop_right_en
+    #   0 STOPR signal processing disabled.
+    #   1 STOPR signal processing enabled.
+    'STOP_RIGHT_EN': Representation(1),
+    # 2 pol_stop_left
+    #   0 STOPL input signal is low active.
+    #   1 STOPL input signal is high active.
+    'POL_STOP_LEFT': Representation(2),
+    # 3 pol_stop_right
+    #   0 STOPR input signal is low active.
+    #   1 STOPR input signal is high active.
+    'POL_STOP_RIGHT': Representation(3),
+    # 4 invert_stop_direction
+    #   0 STOPL / STOPR stops motor in negative / positive direction.
+    #   1 STOPL / STOPR stops motor in positive / negative direction.
+    'INVERT_STOP_DIRECTION': Representation(4),
+    # 5 soft_stop_en
+    #   0 Hard stop enabled. VACTUAL is immediately set to 0 on any external stop event.
+    #   1 Soft stop enabled.A linear velocity ramp is used for decreasing VACTUAL to v = 0.
+    'SOFT_STOP_EN': Representation(5),
+    # 6 virtual_left_limit_en
+    #   0 Position limit VIRT_STOP_LEFT disabled.
+    #   1 Position limit VIRT_STOP_LEFT enabled.
+    'VIRTUAL_LEFT_LIMIT_EN': Representation(6),
+    # 7 virtual_right_limit_en
+    #   0 Position limit VIRT_STOP_RIGHT disabled.
+    #   1 Position limit VIRT_STOP_RIGHT enabled.
+    'VIRTUAL_RIGHT_LIMIT_EN': Representation(7),
+    # 9:8 virt_stop_mode
+    #   0 Reserved.
+    #   1 Hard stop: VACTUAL is set to 0 on a virtual stop event.
+    #   2 Soft stop is enabled with linear velocity ramp (from VACTUAL to v = 0).
+    #   3 Reserved.
+    'VIRT_STOP_MODE': Representation(8, 9),
+    # 10 latch_x_on_inactive_l
+    #   0 No latch of XACTUAL if STOPL becomes inactive.
+    #   1 X_LATCH = XACTUAL is stored in the case STOPL becomes inactive.
+    'LATCH_X_ON_INACTIVE_L': Representation(10),
+    # 11 latch_x_on_active_l
+    #   0 No latch of XACTUAL if STOPL becomes active.
+    #   1 X_LATCH = XACTUAL is stored in the case STOPL becomes active.
+    'LATCH_X_ON_ACTIVE_L': Representation(11),
+    # 12 latch_x_on_inactive_r
+    #   0 No latch of XACTUAL if STOPR becomes inactive.
+    #   1 X_LATCH = XACTUAL is stored in the case STOPL becomes inactive.
+    'LATCH_X_ON_INACTIVE_R': Representation(12),
+    # 13 latch_x_on_active_r
+    #   0 No latch of XACTUAL if STOPR becomes active.
+    #   1 X_LATCH = XACTUAL is stored in the case STOPL becomes active.
+    'LATCH_X_ON_ACTIVE_R': Representation(13),
+    # 14 stop_left_is_home
+    #   0 STOPL input signal is not also the HOME position.
+    #   1 STOPL input signal is also the HOME position.
+    'STOP_LEFT_IS_HOME': Representation(14),
+    # 15 stop_right_is_home
+    #   0 STOPR input signal is not lso the HOME position.
+    #   1 STOPR input signal is also the HOME position.
+    'STOP_RIGHT_IS_HOME': Representation(15),
+    # 19:16 home_event
+    #   0 Next active N event of connected ABN encoder signal indicates HOME position.
+    #   2 HOME_REF = 1 indicates an active home event X_HOME is located at the rising edge of the active range.
+    #   3 HOME_REF = 0 indicates negative region / position from the home position.
+    #   4 HOME_REF = 1 indicates an active home event X_HOME is located at the falling edge of the active range.
+    #   6 HOME_REF = 1 indicates an active home event X_HOME is located in the middle of the active range.
+    #   9 HOME_REF = 0 indicates an active home event X_HOME is located in the middle of the active range.
+    #   11 HOME_REF = 0 indicates an active home event X_HOME is located at the rising edge of the active range.
+    #   12 HOME_REF = 1 indicates negative region / position from the home position.
+    #   13 HOME_REF = 0 indicates an active home event X_HOME is located at the falling edge of the active range.
+    'HOME_EVENT': Representation(16, 19),
+    # 20 start_home_tracking
+    #   0 No storage to X_HOME by passing home position.
+    #   1 Storage of XACTUAL as X_HOME at next regular home event.
+    #     An XLATCH_DONE event is released.
+    #     In case the event is cleared, start_home_tracking is reset automatically
+    'START_HOME_TRACKING': Representation(20),
+    # 21 clr_pos_at_target
+    #   0 Ramp stops at XTARGET if positioning mode is active.
+    #   1 Set XACTUAL = 0 after XTARGET has been reached.
+    #   The next ramp starts immediately.
+    'CLR_POS_AT_TARGET': Representation(21),
+    # 22 circular_movement_en
+    #   0 Range of  XACTUAL is not limited: -2 31 ≤ XACTUAL ≤ 2 31 - 1
+    #   1 Range of XACTUAL is limited by X_RANGE: -X_RANGE ≤ XACTUAL ≤ X_RANGE - 1
+    'CIRCULAR_MOVEMENT_EN': Representation(22),
+    # 24:23 pos_comp_output
+    #   0 TARGET_REACHED is set active on TARGET_REACHED_Flag.
+    #   1 TARGET_REACHED is set active on VELOCITY_REACHED_Flag.
+    #   2 TARGET_REACHED is set active on ENC_FAIL flag.
+    #   3 TARGET_REACHED triggers on POSCOMP_REACHED_Flag.
+    'POS_COMP_OUTPUT': Representation(23, 24),
+    # 25 pos_comp_source
+    #   0 POS_COMP is compared to internal position XACTUAL.
+    #   1 POS_COMP is compared with external position ENC_POS.
+    'POS_COMP_SOURCE': Representation(25),
+    # 26 stop_on_stall
+    #   0 SPI and S / D output interface remain active in case of an stall event.
+    #   1 SPI and S / D output interface stops motion in case of an stall event (hard stop).
+    'STOP_ON_STALL': Representation(26),
+    # 27 drv_after_stall
+    #   0 No further motion in case of an active stop-on-stall event.
+    #   1 Motion is possible in case of an active stop-on-stall event and after the stop-on-stall event is reset.
+    'DRV_AFTER_STALL': Representation(27),
+    # 29:28 modified_pos_compare:
+    #       POS_COMP_REACHED_F / event is based on comparison between XACTUAL resp.ENC_POS and
+    #   0 POS_COMP
+    #   1 X_HOME
+    #   2 X_LATCH resp.ENC_LATCH
+    #   3 REV_CNT
+    'MODIFIED_POS_COMPARE': Representation(28, 29),
+    # 30 automatic_cover
+    #   0 SPI output interface will not transfer automatically any cover datagram.
+    #   1 SPI output interface sends automatically cover datagrams when VACTUAL crosses SPI_SWITCH_VEL.
+    'AUTOMATIC_COVER': Representation(30),
+    # 31 circular_enc_en
+    #   0 Range of ENC_POS is not limited: -2 31 ≤ ENC_POS ≤ 2 31 - 1
+    #   1 Range of ENC_POS is limited by X_RANGE: -X_RANGE ≤ ENC_POS ≤ X_RANGE –1
+    'CIRCULAR_ENC_EN': Representation(31)
+  })
 
 class XActualRegister(Register):
   REGISTER = 0x21
@@ -887,6 +817,279 @@ class ResetClockAndGatingRegister(Register):
     'RESET_REG': Representation(8, 31)
   })
 
-# TODO finish this
+class CurrentScalingConfRegister(Register):
+  REGISTER = 0x05
+  bits = AttributeDict({
+    # 0 hold_current_scale_en
+    #   0 No hold current scaling during standstill phase.
+    #   1 Hold current scaling during standstill phase.
+    'HOLD_CURRENT_SCALE_EN': Representation(0),
+    # 1 drive_current_scale_en
+    #   0 No drive current scaling during motion.
+    #   1 Drive current scaling during motion.
+    'DRIVE_CURRENT_SCALE_EN': Representation(1),
+    # 2 boost_current_on_acc_en
+    #   0 No boost current scaling for deceleration ramps.
+    #   1 Boost current scaling if RAMP_STATE = b’01 (acceleration slopes).
+    'BOOST_CURRENT_ON_ACC_EN': Representation(2),
+    # 3 boost_current_on_dec_en
+    #   0 No boost current scaling for deceleration ramps.
+    #   1 Boost current scaling if RAMP_STATE = b’10 (deceleration slopes).
+    'BOOST_CURRENT_ON_DEC_EN': Representation(3),
+    # 4 boost_current_after_start_en
+    #   0 No boost current at ramp start.
+    #   1 Temporary boost current if VACTUAL = 0 and new ramp starts.
+    'BOOST_CURRENT_AFTER_START_EN': Representation(4),
+    # 5 sec_drive_current_scale_en
+    #   0 One drive current value for the whole motion ramp.
+    #   1 Second drive current scaling for VACTUAL > VDRV_SCALE_LIMIT.
+    'SEC_DRIVE_CURRENT_SCALE_EN': Representation(5),
+    # 6 freewheeling_en
+    #   0 No freewheeling.
+    #   1 Freewheeling after standby phase.
+    'FREEWHEELING_EN': Representation(6),
+    # 7 closed_loop_scale_en
+    #   0 No closed-loop current scaling.
+    #   1 Closed-loop current scaling – CURRENT_CONF(6:0) = 0 is set automatically
+    #     Turn off for closed-loop calibration with maximum current!
+    'CLOSED_LOOP_SCALE_EN': Representation(7),
+    # 8 pwm_scale_en
+    #   0 PWM scaling is disabled.
+    #   1 PWM scaling is enabled.
+    'PWM_SCALE_EN': Representation(8),
+    # 15:9 Reserved. Set to 0x00.
+    # 31:16 PWM_AMPL
+    # PWM amplitude during Voltage PWM mode at VACTUAL = 0.
+    # i Maximum duty cycle = (0.5 + (PWM_AMPL + 1) / 217)
+    # Minimum duty cycle = (0.5 – (PWM_AMPL + 1) / 2
+    # PWM_AMPL = 216 – 1 at VACTUAL = PWM_VMAX.
+    'PWM_AMPL': Representation(16, 31)
+  })
+
 class InputFilterRegister(Register):
   REGISTER = 0x3
+  # TODO finish this
+
+class CurrentScaleValuesRegister(Register):
+  REGISTER = 0x06
+  # TODO finish this class
+
+class StandbyDelayRegister(Register):
+  REGISTER = 0x15
+  bits = AttributeDict({
+    # RW. 31:0 STDBY_DELAY(Default: 0x00000000)
+    # Delay time [# clock cycles] between ramp stop and activating standby phase.
+    'STDBY_DELAY': Representation(0, 31)
+  })
+
+class FreewheelDelayRegister(Register):
+  REGISTER = 0x16
+  bits = AttributeDict({
+    # RW. 31:0 FREEWHEEL_DELAY (Default:0x00000000)
+    # Delay time [# clock cycles] between initialization of active standby phase and
+    # freewheeling initialization.
+    'FREEWHEEL_DELAY': Representation(0, 31)
+  })
+
+class VDRVScaleLimitRegister(Register):
+  REGISTER = 0x17
+  bits = AttributeDict({
+    # 23: 0 VDRV_SCALE_LIMIT(Default: 0x000000)
+    # (Voltage PWM mode is not active)
+    # Drive scaling separator:
+    # DRV2_SCALE_VAL is active in case VACTUAL > VDRV_SCALE_LIMIT
+    # DRV1_SCALE_VAL is active in case VACTUAL ≤ VDRV_SCALE_LIMIT
+    # 2nd assignment: Also used as PWM_VMAX if Voltage PWM is enabled(see 19.17. )
+    'VDRV_SCALE_LIMIT': Representation(0, 23)
+  })
+
+class UpScaleDelayRegister(Register):
+  REGISTER = 0x18
+  bits = AttributeDict({
+    # RW 23:0
+    # UP_SCALE_DELAY(Default: 0x000000) (Open - loop operation)
+    #   Increment delay[  # clock cycles]. The value defines the clock cycles, which are used to increase the current
+    #   scale value for one step towards higher values.
+    # CL_UPSCALE_DELAY (Default:0x000000) (Closed - loop operation)
+    #   Increment delay[  # clock cycles]. The value defines the clock cycles, which are used to increase the current
+    #   scale value for one step towards higher current values during closed-loop operation.
+    'UP_SCALE_DELAY': Representation(0, 23),
+    'CL_UPSCALE_DELAY': Representation(0, 23)
+  })
+
+class HoldScaleDelayRegister(Register):
+  REGISTER = 0x19
+  bits = AttributeDict({
+    # 23: 0
+    # HOLD_SCALE_DELAY(Default: 0x000000) (Open - loop operation)
+    #   Decrement delay[  # clock cycles] to decrease the actual scale value by one step towards hold current.
+    # CL_DNSCALE_DELAY(Default: 0x000000) (Closed - loop operation)
+    #   Decrement delay[  # clock cycles] to decrease the current scale value by one step towards lower current values during closed - loop operation.
+    'HOLD_SCALE_DELAY': Representation(0, 23),
+    'CL_DNSCALE_DELAY': Representation(0, 23)
+  })
+
+class DriveScaleDelayRegister(Register):
+  REGISTER = 0x1A
+  bits = AttributeDict({
+    # 23:0 DRV_SCALE_DELAY(Default: 0x000000)
+    # Decrement delay[  # clock cycles], which signifies current scale value decrease by one step towards lower value.
+    'DRV_SCALE_DELAY': Representation(0, 23)
+  })
+
+class BoostTimeRegister(Register):
+  REGISTER = 0x1B
+  bits = AttributeDict({
+    # RW 31:0
+    # BOOST_TIME(Default: 0x00000000)
+    # Time[  # clk cycles] after a ramp start when boost scaling is active.
+    'BOOST_TIME': Representation(0, 31)
+  })
+
+class BetaGammaRegister(Register):
+  REGISTER = 0x1C
+  bits = AttributeDict({
+    # 8:0 CL_BETA(0x0FF)
+    # Maximum commutation angle for closed - loop regulation.
+    # - Set CL_BETA > 255 carefully(esp. if cl_vlimit_en = 1).
+    # - Exactly 255 is recommended for best performance.
+    'CL_BETA': Representation(0, 8),
+    # 23:16
+    # CL_GAMMA(Default: 0xFF)
+    # Maximum balancing angle to compensate back - EMF at higher velocities during closed - loop regulation.
+    'CL_GAMMA': Representation(16, 23)
+  })
+
+class SpiDacAddressRegister(Register):
+  REGISTER = 0x1D
+  bits = AttributeDict({
+    # 15:0 DAC_ADDR_A(Default: 0x0000)
+    # Fixed command / address, which is sent via SPI output before sending CURRENTA_SPI values.
+    'DAC_ADDR_A': Representation(0, 15),
+    # 31:16 DAC_ADDR_B(Default: 0x0000)
+    # Fixed command / address, which is sent via SPI output before sending current CURRENTB_SPI values.
+    'DAC_ADDR_B': Representation(16, 31),
+    # 23:0 2nd assignment: Also used as SPI_SWITCH_VEL if SPI - DAC mode is disabled(19.16.)
+    'SPI_SWITCH_VEL': Representation(0, 23)
+  })
+
+class FullStepVelocityRegister(Register):
+  REGISTER = 0x60
+  bits = AttributeDict({
+    # 31:0 FS_VEL(Default:0x000000) (Closed-loop and dcStep operation are disabled)
+    # Minimum fullstep velocity [pps].
+    # In case |VACTUAL| > FS_VEL fullstep operation is active, if enabled.
+    # 2nd assignment: Also used as DC_VEL if dcStep is enabled (see section 19.27. )
+    # 3rd assignment: Also used as CL_VMIN_EMF if closed-loop is enabled (see 19.26. )
+    # "Set DC_VEL register 0x60 as threshold velocity value[pps] at which dcStep is activated."
+    'FS_VEL': Representation(0, 31)
+  })
+
+class MSLUT0Register(Register):
+  REGISTER = 0x70
+  bits = AttributeDict({
+    # W. 31:0 MSLUT[0](Default: 0xAAAAB554)
+    # Each bit defines the difference between consecutive values in the microstep look - up table MSLUT( in combination with MSLUTSEL).
+    'MSLUT0': Representation(0, 31)
+  })
+
+class MSLUT1Register(Register):
+  REGISTER = 0x71
+  bits = AttributeDict({
+    # W. 31:0 MSLUT[1](Default: 0x4A9554AA)
+    # Each bit defines the difference between consecutive values in the microstep look - up table MSLUT( in combination with MSLUTSEL).
+    'MSLUT1': Representation(0, 31)
+  })
+
+class MSLUT2Register(Register):
+  REGISTER = 0x72
+  bits = AttributeDict({
+    # W. 31:0 MSLUT[2](Default: 0x24492929)
+    # Each bit defines the difference between consecutive values in the microstep look - up table MSLUT( in combination with MSLUTSEL).
+    'MSLUT2': Representation(0, 31)
+  })
+
+class MSLUT3Register(Register):
+  REGISTER = 0x73
+  bits = AttributeDict({
+    # W. 31:0 MSLUT[3](Default: 0x10104222)
+    # Each bit defines the difference between consecutive values in the microstep look - up table MSLUT( in combination with MSLUTSEL).
+    'MSLUT3': Representation(0, 31)
+  })
+
+class MSLUT4Register(Register):
+  REGISTER = 0x74
+  bits = AttributeDict({
+    # W. 31:0 MSLUT[4](Default: 0xFBFFFFFF)
+    # Each bit defines the difference between consecutive values in the microstep look - up table MSLUT( in combination with MSLUTSEL).
+    'MSLUT4': Representation(0, 31)
+  })
+
+class MSLUT5Register(Register):
+  REGISTER = 0x75
+  bits = AttributeDict({
+    # W. 31:0 MSLUT[5](Default: 0xB5BB777D)
+    # Each bit defines the difference between consecutive values in the microstep look - up table MSLUT( in combination with MSLUTSEL).
+    'MSLUT5': Representation(0, 31)
+  })
+
+class MSLUT6Register(Register):
+  REGISTER = 0x76
+  bits = AttributeDict({
+    # W. 31:0 MSLUT[6](Default: 0x49295556)
+    # Each bit defines the difference between consecutive values in the microstep look - up table MSLUT( in combination with MSLUTSEL).
+    'MSLUT6': Representation(0, 31)
+  })
+
+class MSLUT7Register(Register):
+  REGISTER = 0x77
+  bits = AttributeDict({
+    # W. 31:0 MSLUT[7](Default: 0x00404222)
+    # Each bit defines the difference between consecutive values in the microstep look - up table MSLUT( in combination with MSLUTSEL).
+    'MSLUT7': Representation(0, 31)
+  })
+
+class MSLUTSelectRegister(Register):
+  REGISTER = 0x78
+  bits = AttributeDict({
+    # W. 31:0 MSLUTSEL(Default: 0xFFFF8056)
+    # Definition of the four segments within each quarter MSLUT wave.
+    'MSLUTSEL': Representation(0, 31)
+  })
+
+class MicrostepCountRegister(Register):
+  REGISTER = 0x79
+  bits = AttributeDict({
+    # R 9:0 MSCNT(Default: 0x000)
+    # Actual µStep position of the sine value.
+    # W 2nd assignment: Also used as MS_OFFSET if Voltage PWM is enabled(see 19.17. )
+    'MSCNT': Representation(0, 9),
+    'MS_OFFSET': Representation(0, 9)
+  })
+
+class StartSineRegister(Register):
+  REGISTER = 0x7E
+  bits = AttributeDict({
+    # W 7:0 START_SIN(Default: 0x00)
+    # Start value for sine waveform.
+    'START_SIN': Representation(0, 7),
+    # W 23:16 START_SIN90_120(Default: 0xF7)
+    # Start value for cosine waveform.
+    'START_SIN90_120': Representation(16, 23),
+    # W 31:24GEAR_RATIO
+    # 2nd assignment: Also used as DAC_OFFSET for write access(see section 19.30.)
+    'DAC_OFFSET': Representation(24, 31)
+  })
+
+class GearRatioRegister(Register):
+  REGISTER = 0x12
+  bits = AttributeDict({
+    # 31:0 GEAR_RATIO(Default: 0x01000000)
+    # Constant value that is added to the internal position counter by an active step at STPIN.
+    # Value representation: 8 digits and 24 decimal places.
+    'GEAR_RATIO': Representation(0, 31, 8, 24)
+  })
+
+# TODO add these registers
+# 0x6c COVER_LOW POLLING_STATUS
+# 0x6d COVER_HIGH POLLING_REG

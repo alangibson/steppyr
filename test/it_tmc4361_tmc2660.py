@@ -10,12 +10,23 @@ tmc4361 = TMC4361Driver(
   spi=spi1,
   reset_pin=26
 )
-tmc4361.activate()
+# Configure tmc4361
 tmc4361.set_microsteps(1)
-tmc4361.set_target_speed(5000)
-
-tmc4361.enable_tmc26x()
+tmc4361.set_ramp_trapezoid(target_speed=100, target_acceleration=10, target_deceleration=10)
+# Configure tmc26x
 tmc4361.tmc26x.set_current(1000)
+tmc4361.tmc26x.set_constant_off_time_chopper(
+  constant_off_time=7,
+  blank_time=54,
+  fast_decay_time_setting=13,
+  sine_wave_offset=12,
+  use_current_comparator=1)
+tmc4361.tmc26x.set_microsteps(1)
+# Or from config files
+# tmc4361.load_registers_from_ini('test/tmc4361/data/20170210_02.55.36_TMC4361_Settings.ini')
+# tmc4361.tmc26x.load_registers_from_ini('test/tmc4361/data/20170210_02.56.32_TMC26x_Settings.ini')
+
+tmc4361.activate()
 
 # set_target_steps() aka move_to()
 tmc4361.set_target_steps(10000)

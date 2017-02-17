@@ -1,20 +1,18 @@
 import logging
 import RPi.GPIO as GPIO
+import steppyr
 from steppyr.drivers import Driver
 from steppyr.drivers.tmc26x import TMC26XDriver
 from steppyr.drivers.tmc4361.registers import *
 from steppyr.drivers.tmc4361.spi import TMC26xCoverSPI
 from steppyr.lib.bits import _BV
 from steppyr.lib.functions import sleep_microseconds
-from steppyr.lib.trinamic import MICROSTEP_RESOLUTION
+from steppyr.lib.trinamic import MICROSTEP_RESOLUTION, parse_ini
 
 log = logging.getLogger(__name__)
 
 # Toggle calling of the report() function in should_step()
 REPORT = False
-
-# CLOCK_FREQUENCY = 16000000
-CLOCK_FREQUENCY = 4000000
 
 # Defines ported to Python functions
 # simple FP math see https://ucexperiment.wordpress.com/2012/10/28/fixed-point-math-on-the-arduino-platform/
@@ -23,61 +21,89 @@ FIXED_22_2_MAKE = lambda a: a * (1 << 2)
 
 class TMC4361Driver(Driver):
 
-  def __init__(self, spi, reset_pin=None, pin_mode=GPIO.BCM):
+  def __init__(self, spi, reset_pin=None, pin_mode=GPIO.BCM, clock_frequency=4000000):
     self._spi = spi
     self._reset_pin = reset_pin
     self._pin_mode = pin_mode
     # Initialize TMC26x driver
     self.tmc26x = TMC26XDriver(spi=TMC26xCoverSPI(self._spi), dir_pin=0, step_pin=0, current=300, resistor=150)
-    # Initialize Registers
-    self.spi_status_selection_register = SpiStatusSelectionRegister()
-    self.general_configuration_register = GeneralConfigurationRegister()
-    self.ramp_mode_register = RampModeRegister()
-    self.external_clock_frequency_register = ExternalClockFrequencyRegister(CLOCK_FREQUENCY)
-    self.motor_driver_settings_register = MotorDriverSettingsRegister()
-    self.v_max_register = VMaxRegister()
-    self.v_break_register = VBreakRegister()
-    self.a_max_register = AMaxRegister()
-    self.d_max_register = DMaxRegister()
-    self.v_start_register = VStartRegister()
-    self.v_stop_register = VStopRegister()
-    self.bow1_register = Bow1Register()
-    self.bow2_register = Bow2Register()
-    self.bow3_register = Bow3Register()
-    self.bow4_register = Bow4Register()
-    self.a_start_register = AStartRegister()
-    self.d_final_register = DFinalRegister()
-    self.x_actual_register = XActualRegister()
-    self.a_actual_register = AActualRegister()
-    self.v_actual_register = VActualRegister()
-    self.x_target_register = XTargetRegister()
-    self.status_flag_register = StatusFlagRegister()
-    self.status_event_register = StatusEventRegister()
+    # Initialize Registers with defaults
+    self._registers = {
+      ReferenceConfRegister: ReferenceConfRegister(),
+      SpiStatusSelectionRegister: SpiStatusSelectionRegister(),
+      SPIOutConfRegister: SPIOutConfRegister(),
+      GeneralConfigurationRegister: GeneralConfigurationRegister()\
+        .set(GeneralConfigurationRegister.bits.POL_DIR_OUT),
+      RampModeRegister: RampModeRegister(),
+      ExternalClockFrequencyRegister: ExternalClockFrequencyRegister(clock_frequency),
+      MotorDriverSettingsRegister: MotorDriverSettingsRegister(),
+      VMaxRegister: VMaxRegister(),
+      VBreakRegister: VBreakRegister(),
+      AMaxRegister: AMaxRegister(),
+      DMaxRegister: DMaxRegister(),
+      VStartRegister: VStartRegister(),
+      VStopRegister: VStopRegister(),
+      Bow1Register: Bow1Register(),
+      Bow2Register: Bow2Register(),
+      Bow3Register: Bow3Register(),
+      Bow4Register: Bow4Register(),
+      AStartRegister: AStartRegister(),
+      DFinalRegister: DFinalRegister(),
+      XActualRegister: XActualRegister(),
+      AActualRegister: AActualRegister(),
+      VActualRegister: VActualRegister(),
+      XTargetRegister: XTargetRegister(),
+      StatusFlagRegister: StatusFlagRegister(),
+      StatusEventRegister: StatusEventRegister()\
+        .set(StatusEventRegister.bits.TARGET_REACHED)
+        .set(StatusEventRegister.bits.POS_COMP_REACHED),
+      CurrentScaleValuesRegister: CurrentScaleValuesRegister()
+      #StandbyDelayRegister: StandbyDelayRegister(),
+      #FreewheelDelayRegister: FreewheelDelayRegister(),
+      #VDRVScaleLimitRegister: VDRVScaleLimitRegister(),
+      #UpScaleDelayRegister: UpScaleDelayRegister(),
+      #HoldScaleDelayRegister: HoldScaleDelayRegister(),
+      #DriveScaleDelayRegister: DriveScaleDelayRegister(),
+      #BoostTimeRegister: BoostTimeRegister(),
+      #BetaGammaRegister: BetaGammaRegister(),
+      #SpiDacAddressRegister: SpiDacAddressRegister(),
+      #FullStepVelocityRegister: FullStepVelocityRegister(),
+      #MSLUT0Register: MSLUT0Register(),
+      #MSLUT1Register: MSLUT1Register(),
+      #MSLUT2Register: MSLUT2Register(),
+      #MSLUT3Register: MSLUT3Register(),
+      #MSLUT4Register: MSLUT4Register(),
+      #MSLUT5Register: MSLUT5Register(),
+      #MSLUT6Register: MSLUT6Register(),
+      #MSLUT7Register: MSLUT7Register(),
+      #MSLUTSelectRegister: MSLUTSelectRegister(),
+      #MicrostepCountRegister: MicrostepCountRegister(),
+      #StartSineRegister: StartSineRegister(),
+      #GearRatioRegister: GearRatioRegister()
+    }
 
   def flush_registers(self):
-    self._spi.write(self.spi_status_selection_register)
-    self._spi.write(self.general_configuration_register)
-    self._spi.write(self.ramp_mode_register)
-    self._spi.write(self.external_clock_frequency_register)
-    self._spi.write(self.motor_driver_settings_register)
-    self._spi.write(self.v_max_register)
-    self._spi.write(self.v_break_register)
-    self._spi.write(self.a_max_register)
-    self._spi.write(self.d_max_register)
-    self._spi.write(self.v_start_register)
-    self._spi.write(self.v_stop_register)
-    self._spi.write(self.bow1_register)
-    self._spi.write(self.bow2_register)
-    self._spi.write(self.bow3_register)
-    self._spi.write(self.bow4_register)
-    self._spi.write(self.a_start_register)
-    self._spi.write(self.d_final_register)
-    self._spi.write(self.x_actual_register)
-    self._spi.write(self.a_actual_register)
-    self._spi.write(self.v_actual_register)
-    self._spi.write(self.x_target_register)
-    self._spi.write(self.status_flag_register)
-    self._spi.write(self.status_event_register)
+    for register in self._registers.values():
+      self._spi.write(register)
+
+  def load_registers(self):
+    for register_class, register in self._registers.items():
+      self._registers[register_class] = self._spi.read(register)
+
+  def load_register(self, register_key):
+    register = self._spi.read(self._registers[register_key])
+    self._registers[register_key] = register
+    return register
+
+  def load_register_value(self, register_key, value_key):
+    return self.load_register(register_key).get(value_key)
+
+  def load_registers_from_ini(self, path):
+    for register_code, register_value in parse_ini(path):
+      # Look up register
+      for register_class, register in self._registers.items():
+        if register_class.REGISTER == register_code:
+          self._registers[register_class] = register_class(register_value)
 
   #
   # Driver API methods
@@ -95,18 +121,10 @@ class TMC4361Driver(Driver):
     if self._reset_pin:
       GPIO.setup(self._reset_pin, GPIO.OUT)
     self.reset(hard=True)
-    # Select the events we want reported with every status code.
-    # see datasheet 19.13-19.14
-    self._spi.write(self.spi_status_selection_register
-      .set(StatusEventRegister.bits.TARGET_REACHED)
-      .set(StatusEventRegister.bits.POS_COMP_REACHED)
-    )
-    self._spi.write(self.general_configuration_register
-      .set(GeneralConfigurationRegister.bits.POL_DIR_OUT)
-    )
+    # We need to write our current register values to the TMC4361 since we just
+    # wiped them all out on the chip due to reset.
     self.flush_registers()
     # TODO ? self._spi.writeRegister(registers.TMC4361_SH_RAMP_MODE_REGISTER, RAMP_MODE_POSITIONING_MODE | RAMP_MODE_NO_RAMP)
-    self._spi.write(self.external_clock_frequency_register)
     # TODO ? NEEDED so THAT THE SQUIRREL CAN RECOMPUTE EVERYTHING!
     # self._spi.writeRegister(registers.TMC4361_START_DELAY_REGISTER, 512)
     # self.set_motor_steps_per_rev(self._steps_per_revolution)
@@ -118,6 +136,7 @@ class TMC4361Driver(Driver):
     # filter |= (2<<8) | 0x4000
     # self._spi.writeRegister(registers.TMC4361_INPUT_FILTER_REGISTER, filter)
     self.enable_tmc26x()
+    self.load_registers()
 
   def shutdown(self):
     """
@@ -153,17 +172,18 @@ class TMC4361Driver(Driver):
     Implements Profile.set_microsteps(microsteps) method.
     """
     value = MICROSTEP_RESOLUTION[microsteps]
-    self._spi.write(self.motor_driver_settings_register
+    self._spi.write(self._registers[MotorDriverSettingsRegister]
       .set(MotorDriverSettingsRegister.bits.MSTEP_PER_FS, value) # full stepping
     )
+    # Set microsteps on tmc26x
+    self.tmc26x.set_microsteps(microsteps)
 
   @property
   def microsteps(self):
-    self.motor_driver_settings_register = self._spi.read(self.motor_driver_settings_register)
-    value = self.motor_driver_settings_register.get(MotorDriverSettingsRegister.bits.MSTEP_PER_FS)
+    value = self.load_register_value(MotorDriverSettingsRegister, MotorDriverSettingsRegister.bits.MSTEP_PER_FS)
+    # TODO add a reverse lookup method to MICROSTEP_RESOLUTION
     # reverse lookup to get microsteps
-    microsteps = [k for k,v in MICROSTEP_RESOLUTION.items() if v == value][0]
-    return microsteps
+    return [k for k,v in MICROSTEP_RESOLUTION.items() if v == value][0]
 
   @property
   def pulse_width(self):
@@ -186,14 +206,14 @@ class TMC4361Driver(Driver):
     """
     Implements Profile.set_target_speed(speed) method.
     """
-    self._spi.write(self.v_max_register.set(VMaxRegister.bits.VMAX, speed))
+    self._spi.write(self._registers[VMaxRegister].set(VMaxRegister.bits.VMAX, speed))
 
   def set_target_steps(self, absolute_steps):
     """
     Implements Profile.set_target_steps(absolute_steps) method.
     Acts like StepperController.move_to(position) method
     """
-    self._spi.write(self.x_target_register.set(XTargetRegister.bits.XTARGET, absolute_steps))
+    self._spi.write(self._registers[XTargetRegister].set(XTargetRegister.bits.XTARGET, absolute_steps))
 
   def set_target_acceleration(self, acceleration):
     """
@@ -201,31 +221,29 @@ class TMC4361Driver(Driver):
 
     acceleration: (int) steps / sec / sec
     """
-    self._spi.write(self.a_max_register.set(AMaxRegister.bits.AMAX, acceleration))
-    self._spi.write(self.d_max_register.set(DMaxRegister.bits.DMAX, acceleration))
+    self._spi.write(self._registers[AMaxRegister].set(AMaxRegister.bits.AMAX, acceleration))
+    self._spi.write(self._registers[DMaxRegister].set(DMaxRegister.bits.DMAX, acceleration))
 
   def set_full_steps_per_rev(self, full_steps_per_rev):
     """
     Implements Profile.set_motor_steps_per_rev(steps_per_rev) method.
     """
-    self._spi.write(self.motor_driver_settings_register
+    self._spi.write(self._registers[MotorDriverSettingsRegister]
       .set(MotorDriverSettingsRegister.bits.FS_PER_REV, full_steps_per_rev) )
 
   @property
   def full_steps_per_rev(self):
-    self.motor_driver_settings_register = self._spi.read(self.motor_driver_settings_register)
-    return self.motor_driver_settings_register.get(MotorDriverSettingsRegister.bits.FS_PER_REV)
+    return self.load_register_value(MotorDriverSettingsRegister, MotorDriverSettingsRegister.bits.FS_PER_REV)
 
   def set_current_steps(self, position):
     """
     Implements Profile.set_current_position(position) method.
     """
-    self._spi.write(self.x_actual_register.set(XActualRegister.bits.XACTUAL, position))
+    self._spi.write(self._registers[XActualRegister].set(XActualRegister.bits.XACTUAL, position))
 
   @property
   def current_acceleration(self):
-    self.a_actual_register = self._spi.read(self.a_actual_register)
-    return self.a_actual_register.get(AActualRegister.bits.AACTUAL)
+    return self.load_register_value(AActualRegister, AActualRegister.bits.AACTUAL)
 
   @property
   def steps_to_go(self):
@@ -246,13 +264,17 @@ class TMC4361Driver(Driver):
     """
     Implements Profile.direction method.
     """
-    # TODO Implement
-    pass
+    current_speed = self.load_register_value(VActualRegister, VActualRegister.bits.VACTUAL)
+    if current_speed < 0:
+      return steppyr.DIRECTION_CCW
+    elif current_speed > 0:
+      return steppyr.DIRECTION_CW
+    else:
+      return steppyr.DIRECTION_NONE
 
   @property
   def current_steps(self):
-    self.x_actual_register = self._spi.read(self.x_actual_register)
-    return self.x_actual_register.get(XActualRegister.bits.XACTUAL)
+    return self.load_register_value(XActualRegister, XActualRegister.bits.XACTUAL)
 
   def compute_new_speed(self):
     pass
@@ -270,9 +292,17 @@ class TMC4361Driver(Driver):
     """
     Implements StepperController.stop() method.
     """
-    # TODO In order to stop the motion during positioning, do as follows:
-    # Action: Set VMAX = 0 (register 0x24).
-    pass
+    # TODO make stopping via VMAX work correctly
+    # Docs say to set VMAX=0, but then we would always have to reset speed when we want to move.
+    # self._last_target_speed = self._registers[VMaxRegister].get(VMaxRegister.bits.VMAX)
+    # self._spi.write(self._registers[VMaxRegister].set(VMaxRegister.bits.VMAX, 0))
+    # Immediately switching back to original VMAX causes motor to just keep running
+    # self._spi.write(self._registers[VMaxRegister].set(VMaxRegister.bits.VMAX, self._last_target_speed))
+    # self._spi.write(self._registers[VActualRegister].set(VActualRegister.bits.VACTUAL, 0))
+    # Setting target position = current position.
+    # Warning: that means our position attribute is not reliable!
+    target_position = self._registers[XTargetRegister].get(XTargetRegister.bits.XTARGET)
+    self._spi.write(self._registers[XActualRegister].set(XActualRegister.bits.XACTUAL, target_position))
 
   # TODO const char homeMotorTMC4361
 
@@ -282,13 +312,11 @@ class TMC4361Driver(Driver):
 
   @property
   def target_acceleration(self):
-    self.a_max_register = self._spi.read(self.a_max_register)
-    return self.a_max_register.get(AMaxRegister.bits.AMAX)
+    return self.load_register_value(AMaxRegister, AMaxRegister.bits.AMAX)
 
   @property
   def target_deceleration(self):
-    self.d_max_register = self._spi.read(self.d_max_register)
-    return self.d_max_register.get(DMaxRegister.bits.DMAX)
+    return self.load_register_value(DMaxRegister, DMaxRegister.bits.DMAX)
 
   def set_ramp_scurve(self, v_max, a_max, d_max, bow1, bow2, bow3, bow4,
     a_start=0, d_final=0,
@@ -335,23 +363,23 @@ class TMC4361Driver(Driver):
       - BOW4 determines the value which decreases the absolute deceleration value.
       - DMAX determines the maximum absolute deceleration value.
     """
-    self.ramp_mode_register\
+    self._registers[RampModeRegister]\
       .set(RampModeRegister.bits.MOTION_PROFILE, motion_profile)\
       .set(RampModeRegister.bits.OPERATION_MODE, operation_mode)
-    self.bow1_register.set(Bow1Register.bits.BOW1, bow1)
-    self.bow2_register.set(Bow2Register.bits.BOW2, bow2)
-    self.bow3_register.set(Bow3Register.bits.BOW3, bow3)
-    self.bow4_register.set(Bow4Register.bits.BOW4, bow4)
-    self.v_max_register.set(VMaxRegister.bits.VMAX, v_max)
-    self.a_max_register.set(AMaxRegister.bits.AMAX, a_max)
-    self.d_max_register.set(DMaxRegister.bits.DMAX, d_max)
-    self.v_start_register.set(VStartRegister.bits.VSTART, v_start)
-    self.v_stop_register.set(VStopRegister.bits.VSTOP, v_stop)
-    self.a_start_register.set(AStartRegister.bits.ASTART, a_start)
-    self.d_final_register.set(DFinalRegister.bits.DFINAL, d_final)
+    self._registers[Bow1Register].set(Bow1Register.bits.BOW1, bow1)
+    self._registers[Bow2Register].set(Bow2Register.bits.BOW2, bow2)
+    self._registers[Bow3Register].set(Bow3Register.bits.BOW3, bow3)
+    self._registers[Bow4Register].set(Bow4Register.bits.BOW4, bow4)
+    self._registers[VMaxRegister].set(VMaxRegister.bits.VMAX, v_max)
+    self._registers[AMaxRegister].set(AMaxRegister.bits.AMAX, a_max)
+    self._registers[DMaxRegister].set(DMaxRegister.bits.DMAX, d_max)
+    self._registers[VStartRegister].set(VStartRegister.bits.VSTART, v_start)
+    self._registers[VStopRegister].set(VStopRegister.bits.VSTOP, v_stop)
+    self._registers[AStartRegister].set(AStartRegister.bits.ASTART, a_start)
+    self._registers[DFinalRegister].set(DFinalRegister.bits.DFINAL, d_final)
     self.flush_registers()
 
-  def set_ramp_none(self):
+  def set_ramp_none(self, target_speed):
     """
     Motion profile No Ramp follows VMAX only (rectangular velocity shape).
 
@@ -374,14 +402,15 @@ class TMC4361Driver(Driver):
 
     TODO Do NOT exceed VMAX ≤ fCLK / 4 pulses for positioning mode.
     """
-    self._spi.write(self.ramp_mode_register
+    self._spi.write(self._registers[RampModeRegister]
       .set(RampModeRegister.bits.MOTION_PROFILE, 0) # no ramp
       .set(RampModeRegister.bits.OPERATION_MODE, 1) # positioning mode
     )
+    self._registers[VMaxRegister].set(VMaxRegister.bits.VMAX, target_speed)
 
-  def set_ramp_trapezoid(self, v_max, a_max, d_max,
-    motion_profile=1, operation_mode=1, v_break=0,
-    v_start=0, v_stop=0):
+  def set_ramp_trapezoid(self, target_speed, target_acceleration, target_deceleration,
+      motion_profile=1, operation_mode=1, v_break=0,
+      v_start=0, v_stop=0):
     """
     Consideration of acceleration and deceleration values
     without adaptation of these acceleration values.
@@ -403,21 +432,16 @@ class TMC4361Driver(Driver):
     Acceleration slope and deceleration slopes have only one acceleration and
     deceleration value each.
     """
-    self.ramp_mode_register\
+    self._registers[RampModeRegister]\
       .set(RampModeRegister.bits.MOTION_PROFILE, motion_profile)\
       .set(RampModeRegister.bits.OPERATION_MODE, operation_mode)
-    self.v_max_register.set(VMaxRegister.bits.VMAX, v_max)
-    self.v_break_register.set(VBreakRegister.bits.VBREAK, 0)
-    self.a_max_register.set(AMaxRegister.bits.AMAX, a_max)
-    self.d_max_register.set(DMaxRegister.bits.DMAX, d_max)
-    self.v_start_register.set(VStartRegister.bits.VSTART, v_start)
-    self.v_stop_register.set(VStopRegister.bits.VSTOP, v_stop)
+    self._registers[VMaxRegister].set(VMaxRegister.bits.VMAX, target_speed)
+    self._registers[VBreakRegister].set(VBreakRegister.bits.VBREAK, 0)
+    self._registers[AMaxRegister].set(AMaxRegister.bits.AMAX, target_acceleration)
+    self._registers[DMaxRegister].set(DMaxRegister.bits.DMAX, target_deceleration)
+    self._registers[VStartRegister].set(VStartRegister.bits.VSTART, v_start)
+    self._registers[VStopRegister].set(VStopRegister.bits.VSTOP, v_stop)
     self.flush_registers()
-    print('RAMP RAMP RAMP RAMP')
-    print('RAMP RAMP RAMP RAMP')
-    self.report()
-    print('RAMP RAMP RAMP RAMP')
-    print('RAMP RAMP RAMP RAMP')
 
   def set_ramp_sixpoint(self, v_max, v_break, a_start, a_max, d_max, d_final,
     motion_profile=1, operation_mode=1,
@@ -448,54 +472,29 @@ class TMC4361Driver(Driver):
     """
     pass
 
-  def update_move(self):
-    # FIXME What is this code supposed to be doing?
-    # Modify shadow registers
-    # trapezoidal positioning
-    self._spi.writeRegister(TMC4361_SH_RAMP_MODE_REGISTER, _BV(2) | 1)
-    # set the velocity
-    self._spi.writeRegister(TMC4361_SH_V_MAX_REGISTER, FIXED_23_8_MAKE(vMax))
-    # set maximum acceleration
-    self._spi.writeRegister(TMC4361_SH_A_MAX_REGISTER, fixed_a_max)
-    # set maximum deceleration
-    self._spi.writeRegister(TMC4361_SH_D_MAX_REGISTER, fixed_a_max)
-    # self._spi.writeRegister(registers.TMC4361_SH_V_START_REGISTER,FIXED_23_8_MAKE(vMax/2)); //set start velocity
-    # self._spi.writeRegister(registers.TMC4361_SH_V_STOP_REGISTER,FIXED_23_8_MAKE(vMax/2)); //set stop velocity
-    # set start velocity
-    self._spi.writeRegister(TMC4361_SH_V_START_REGISTER,FIXED_23_8_MAKE(0))
-    # set stop velocity
-    self._spi.writeRegister(TMC4361_SH_V_STOP_REGISTER,FIXED_23_8_MAKE(0))
-    # set start velocity
-    self._spi.writeRegister(TMC4361_SH_V_START_REGISTER,FIXED_23_8_MAKE(vStart))
-    # set stop velocity
-    self._spi.writeRegister(TMC4361_SH_V_STOP_REGISTER,FIXED_23_8_MAKE(vStop))
-
   @property
   def current_speed(self):
-    self.v_actual_register = self._spi.read(self.v_actual_register)
-    return self.v_actual_register.get(VActualRegister.bits.VACTUAL)
+    return self.load_register_value(VActualRegister, VActualRegister.bits.VACTUAL)
 
   @property
   def target_steps(self):
-    self.x_target_register = self._spi.read(self.x_target_register)
-    return self.x_target_register.get(XTargetRegister.bits.XTARGET)
+    return self.load_register_value(XTargetRegister, XTargetRegister.bits.XTARGET)
 
   @property
   def target_speed(self):
-    self.v_max_register = self._spi.read(self.v_max_register)
-    return self.v_max_register.get(VMaxRegister.bits.VMAX)
+    return self.load_register_value(VMaxRegister, VMaxRegister.bits.VMAX)
 
   def get_status_flags(self):
-    self.status_flag_register = self._spi.read(self.status_flag_register)
-    return self.status_flag_register.get_values()
+    return self.load_register(StatusFlagRegister).get_values()
 
   def get_status_events(self):
     """
     Read and parse the Status Event Register (EVENTS 0x0E).
     """
-    self.status_event_register = self._spi.read(self.status_event_register)
-    return self.status_event_register.get_values()
+    return self.load_register(StatusEventRegister).get_values()
 
+  # TODO Update this unmainted code
+  '''
   def configureEndstop(self, left, active_high):
     """
     Arguments:
@@ -525,7 +524,10 @@ class TMC4361Driver(Driver):
         # _BV(12) //X_LATCH if stopr becomes inactive ..
         endstop_config |= 0 | _BV(1) | _BV(12)
     self.writeRegister(TMC4361_REFERENCE_CONFIG_REGISTER, endstop_config)
+  '''
 
+  # TODO Update this unmainted code
+  '''
   def configureVirtualEndstop(self, left, positions):
     """
     Arguments:
@@ -545,7 +547,10 @@ class TMC4361Driver(Driver):
       # we doe not latch since we know where they are??
     self.writeRegister(TMC4361_REFERENCE_CONFIG_REGISTER, endstop_config)
     self.writeRegister(position_register, positions)
+  '''
 
+  # TODO Update this unmainted code
+  '''
   def getClearedEndStopConfig(self):
     """
     Arguments:
@@ -567,6 +572,7 @@ class TMC4361Driver(Driver):
     clearing_pattern = ~ clearing_pattern
     endstop_config &= clearing_pattern
     return endstop_config
+  '''
 
   def reset(self, hard=False):
     if hard and self._reset_pin:
@@ -582,7 +588,6 @@ class TMC4361Driver(Driver):
     """
     Log a status report at DEBUG level.
     """
-    # Profile should keep calling step() while we are moving.
     log.debug('TMC4361Driver Status Report')
     log.debug('    current_speed %s', self.current_speed)
     log.debug('    target_position %s', self.target_steps)
@@ -596,6 +601,21 @@ class TMC4361Driver(Driver):
     # Probably not a good idea to constantly read this since it is cleared on read.
     # log.debug('    get_status_events', self.get_status_events())
     log.debug('    get_status_flags %s', self.get_status_flags())
+    for register_class, register in self._registers.items():
+      log.debug('    %s', register_class.__name__)
+      if not hasattr(register, 'bits'):
+        continue
+      for name, representation in register.bits.items():
+        value = register.get(representation)
+        if value:
+          log.debug('        %s %s', name, value)
+    log.debug('TMC26xDriver Status Report')
+    for register_class, register in self.tmc26x._registers.items():
+      log.debug('    %s', register_class.__name__)
+      for name, representation in register.bits.items():
+        value = register.get(representation)
+        if value:
+          log.debug('        %s %s', name, value)
 
   def enable_tmc26x(self):
     """
@@ -604,8 +624,7 @@ class TMC4361Driver(Driver):
     """
     # Configure SPI Output Conf Register to talk to TMC26x
     # TMC_260_CONFIG 0x8440000a //SPI-Out: block/low/high_time=8/4/4 Takte; CoverLength=autom; TMC26x
-    log.debug('Setting SPIOutConfRegister for TCM26x')
-    self._spi.write(SPIOutConfRegister()
+    self._spi.write(self._registers[SPIOutConfRegister]
       .set(SPIOutConfRegister.bits.SPI_OUTPUT_FORMAT, 10)
       .set(SPIOutConfRegister.bits.COVER_DATA_LENGTH, 0)
       .set(SPIOutConfRegister.bits.AUTOREPEAT_COVER_EN)
@@ -614,9 +633,6 @@ class TMC4361Driver(Driver):
       .set(SPIOutConfRegister.bits.SPI_OUT_BLOCK_TIME, 8)
     )
     # Initialize TMC26x
-    log.debug('Initializing TCM26x')
-    # cover_spi = TMC26xCoverSPI(self._spi)
-    # self.tmc26x = TMC26XDriver(spi=cover_spi, dir_pin=0, step_pin=0, current=300, resistor=150)
     self.tmc26x.activate()
 
   def disable_tmc26x(self):
