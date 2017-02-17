@@ -100,6 +100,7 @@ class SinusoidPlan:
     self._start_time_sec = time.time()
     self._sample_rate = sample_rate
     self._last_direction = None
+    self._stopped = False
 
   def _y(self):
     # Units of t must match units of f (preferably seconds)
@@ -132,6 +133,10 @@ class SinusoidPlan:
       self._controller.move_to(y)
 
   async def run_forever(self):
-    while True:
+    self._stopped = False
+    while not self._stopped:
       await asyncio.sleep(self._sample_rate)
       await self.run()
+
+  def stop(self):
+    self._stopped = True
