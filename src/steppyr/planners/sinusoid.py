@@ -123,14 +123,14 @@ class SinusoidPlan:
       return False
     direction = sign(y - self._last_y)
     should_move = direction != self._last_direction
-    # log.debug('y %s _last_y %s direction %s _last_direction %s should_move %s',
-    #           y, self._last_y, direction, self._last_direction, should_move)
     # Remember last y position and direction
     self._last_y = y
     self._last_direction = direction
     # Figure out if it is time to step
     if should_move:
-      self._controller.move_to(y)
+      log.debug('y %s _last_y %s direction %s _last_direction %s should_move %s',
+                y, self._last_y, direction, self._last_direction, should_move)
+      await self._controller.move_to(y)
 
   async def run_forever(self):
     self._stopped = False
