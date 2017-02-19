@@ -308,8 +308,8 @@ class TMC4361Driver(Driver):
     # self._spi.write(self._registers[VActualRegister].set(VActualRegister.bits.VACTUAL, 0))
     # Setting target position = current position.
     # Warning: that means our position attribute is not reliable!
-    # target_position = self._registers[XTargetRegister].get(XTargetRegister.bits.XTARGET)
-    # self._spi.write(self._registers[XActualRegister].set(XActualRegister.bits.XACTUAL, target_position))
+    target_position = self._registers[XTargetRegister].get(XTargetRegister.bits.XTARGET)
+    self._spi.write(self._registers[XActualRegister].set(XActualRegister.bits.XACTUAL, target_position))
 
   # TODO const char homeMotorTMC4361
 
@@ -370,6 +370,7 @@ class TMC4361Driver(Driver):
       - BOW4 determines the value which decreases the absolute deceleration value.
       - DMAX determines the maximum absolute deceleration value.
     """
+    self._last_target_speed = v_max
     self._registers[RampModeRegister]\
       .set(RampModeRegister.bits.MOTION_PROFILE, motion_profile)\
       .set(RampModeRegister.bits.OPERATION_MODE, operation_mode)
@@ -409,6 +410,7 @@ class TMC4361Driver(Driver):
 
     TODO Do NOT exceed VMAX ≤ fCLK / 4 pulses for positioning mode.
     """
+    self._last_target_speed = target_speed
     self._spi.write(self._registers[RampModeRegister]
       .set(RampModeRegister.bits.MOTION_PROFILE, 0) # no ramp
       .set(RampModeRegister.bits.OPERATION_MODE, 1) # positioning mode
@@ -439,6 +441,7 @@ class TMC4361Driver(Driver):
     Acceleration slope and deceleration slopes have only one acceleration and
     deceleration value each.
     """
+    self._last_target_speed = target_speed
     self._registers[RampModeRegister]\
       .set(RampModeRegister.bits.MOTION_PROFILE, motion_profile)\
       .set(RampModeRegister.bits.OPERATION_MODE, operation_mode)
