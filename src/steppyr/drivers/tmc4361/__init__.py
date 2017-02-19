@@ -25,6 +25,7 @@ class TMC4361Driver(Driver):
     self._spi = spi
     self._reset_pin = reset_pin
     self._pin_mode = pin_mode
+    self._last_target_speed = None
     # Initialize TMC26x driver
     self.tmc26x = TMC26XDriver(spi=TMC26xCoverSPI(self._spi), dir_pin=0, step_pin=0, current=300, resistor=150)
     # Initialize Registers with defaults
@@ -206,6 +207,7 @@ class TMC4361Driver(Driver):
     """
     Implements Profile.set_target_speed(speed) method.
     """
+    self._last_target_speed = speed
     self._spi.write(self._registers[VMaxRegister].set(VMaxRegister.bits.VMAX, speed))
 
   def set_target_steps(self, absolute_steps):
@@ -213,6 +215,12 @@ class TMC4361Driver(Driver):
     Implements Profile.set_target_steps(absolute_steps) method.
     Acts like StepperController.move_to(position) method
     """
+    # HACK restore VMAX
+    vmax = self.load_register_value(VMaxRegister, VMaxRegister.bits.VMAX)
+    if not vmax:
+      log.debug('VMax currently %s. Restoring to %s', vmax, self._last_target_speed)
+      self._spi.write(self._registers[VMaxRegister].set(VMaxRegister.bits.VMAX, self._last_target_speed))
+    
     self._spi.write(self._registers[XTargetRegister].set(XTargetRegister.bits.XTARGET, absolute_steps))
 
   def set_target_acceleration(self, acceleration):
@@ -292,17 +300,16 @@ class TMC4361Driver(Driver):
     """
     Implements StepperController.stop() method.
     """
-    # TODO make stopping via VMAX work correctly
     # Docs say to set VMAX=0, but then we would always have to reset speed when we want to move.
     # self._last_target_speed = self._registers[VMaxRegister].get(VMaxRegister.bits.VMAX)
-    # self._spi.write(self._registers[VMaxRegister].set(VMaxRegister.bits.VMAX, 0))
+    self._spi.write(self._registers[VMaxRegister].set(VMaxRegister.bits.VMAX, 0))
     # Immediately switching back to original VMAX causes motor to just keep running
     # self._spi.write(self._registers[VMaxRegister].set(VMaxRegister.bits.VMAX, self._last_target_speed))
     # self._spi.write(self._registers[VActualRegister].set(VActualRegister.bits.VACTUAL, 0))
     # Setting target position = current position.
     # Warning: that means our position attribute is not reliable!
-    target_position = self._registers[XTargetRegister].get(XTargetRegister.bits.XTARGET)
-    self._spi.write(self._registers[XActualRegister].set(XActualRegister.bits.XACTUAL, target_position))
+    # target_position = self._registers[XTargetRegister].get(XTargetRegister.bits.XTARGET)
+    # self._spi.write(self._registers[XActualRegister].set(XActualRegister.bits.XACTUAL, target_position))
 
   # TODO const char homeMotorTMC4361
 
