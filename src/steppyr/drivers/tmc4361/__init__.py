@@ -411,11 +411,11 @@ class TMC4361Driver(Driver):
     TODO Do NOT exceed VMAX ≤ fCLK / 4 pulses for positioning mode.
     """
     self._last_target_speed = target_speed
-    self._spi.write(self._registers[RampModeRegister]
-      .set(RampModeRegister.bits.MOTION_PROFILE, 0) # no ramp
-      .set(RampModeRegister.bits.OPERATION_MODE, 1) # positioning mode
-    )
+    self._registers[RampModeRegister]\
+      .set(RampModeRegister.bits.MOTION_PROFILE, 0)\
+      .set(RampModeRegister.bits.OPERATION_MODE, 1)
     self._registers[VMaxRegister].set(VMaxRegister.bits.VMAX, target_speed)
+    self.flush_registers()
 
   def set_ramp_trapezoid(self, target_speed, target_acceleration, target_deceleration,
       motion_profile=1, operation_mode=1, v_break=0,

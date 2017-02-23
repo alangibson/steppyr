@@ -309,6 +309,11 @@ class TMC26XDriver(StepDirDriver):
       self._spi.write(self._registers[DriverConfigRegister])
       self._spi.write(self._registers[StallGuard2ControlRegister])
 
+  def set_current_scaling(self, current_scaling):
+    self._registers[StallGuard2ControlRegister].set(StallGuard2ControlRegister.bits.CS, current_scaling)
+    if self._started:
+      self._spi.write(self._registers[StallGuard2ControlRegister])
+
   def get_current(self):
     # we calculate the current according to the datasheet to be on the safe side
     # this is not the fastest but the most accurate and illustrative way
@@ -339,7 +344,7 @@ class TMC26XDriver(StepDirDriver):
     self._registers[ChopperControllRegister] = ChopperControllRegister()\
       .set(ChopperControllRegister.bits.CHM, chopper_mode)\
       .set(ChopperControllRegister.bits.TOFF, off_time)\
-      .set(ChopperControllRegister.bits.TBL, blank_value)\
+      .set(ChopperControllRegister.bits.TB, blank_value)\
       .set(ChopperControllRegister.bits.HSTRT, hysteresis_start)\
       .set(ChopperControllRegister.bits.HEND, hysteresis_end)\
       .set(ChopperControllRegister.bits.HDEC, hysteresis_decrement)\
