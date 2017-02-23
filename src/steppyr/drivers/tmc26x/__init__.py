@@ -13,89 +13,17 @@ Ported to Python from https://github.com/trinamic/TMC26XStepper
 
 log = logging.getLogger(__name__)
 
-# some default values used in initialization
-DEFAULT_MICROSTEPPING_VALUE = 32
-
-REGISTER_BIT_PATTERN = 0xFFFFF
-
-# return value for TMC26XStepper.getOverTemperature() if there is a overtemperature situation in the TMC chip
-# This warning indicates that the TCM chip is too warm.
-# It is still working but some parameters may be inferior.
-# You should do something against it.
-TMC26X_OVERTEMPERATURE_PREWARING = 1
-# return value for TMC26XStepper.getOverTemperature() if there is a overtemperature shutdown in the TMC chip
-# This warning indicates that the TCM chip is too warm to operate and has shut down to prevent damage.
-# It will stop working until it cools down again.
-# If you encouter this situation you must do something against it. Like reducing the current or improving the PCB layout
-# and/or heat management.
-TMC26X_OVERTEMPERATURE_SHUTDOWN = 2
-
-# Which values can be read out
-# Selects to readout the microstep position from the motor.
-TMC26X_READOUT_POSITION = 0
-# Selects to read out the StallGuard value of the motor.
-TMC26X_READOUT_STALLGUARD = 1
-# Selects to read out the current current setting (acc. to CoolStep) and the
-# upper bits of the StallGuard value from the motor.
-TMC26X_READOUT_CURRENT = 3
-
-# definitions for the input from the TCM260
-STATUS_STALL_GUARD_STATUS = 0x1
-STATUS_OVER_TEMPERATURE_SHUTDOWN = 0x2
-STATUS_OVER_TEMPERATURE_WARNING = 0x4
-STATUS_SHORT_TO_GROUND_A = 0x8
-STATUS_SHORT_TO_GROUND_B = 0x10
-STATUS_OPEN_LOAD_A = 0x20
-STATUS_OPEN_LOAD_B = 0x40
-STATUS_STAND_STILL = 0x80
-READOUT_VALUE_PATTERN = 0xFFC00
-
-# TMC26X register definitions
-REGISTERS = {
-  'DRIVER_CONTROL_REGISTER': 0x00000,
-  'CHOPPER_CONFIG_REGISTER': 0x80000,
-  'COOL_STEP_REGISTER': 0xA0000,
-  'STALL_GUARD2_LOAD_MEASURE_REGISTER': 0xC0000,
-  'DRIVER_CONFIG_REGISTER': 0xE0000
-}
-
-# definitions for the driver control (DRVCTRL) register
-DRIVER_CONTROL_REGISTER = {
-  'MICROSTEPPING_PATTERN': 0xF,
-  'STEP_INTERPOLATION': 0x200,
-  'DOUBLE_EDGE_STEP': 0x100,
-  'VSENSE': 0x40,
-  'READ_MICROSTEP_POSTION': 0x0,
-  'READ_STALL_GUARD_READING': 0x10,
-  'READ_STALL_GUARD_AND_COOL_STEP': 0x20,
-  'READ_SELECTION_PATTERN': 0x30
-}
-
-# definitions for stall guard2 current register
-STALL_GUARD_REGISTER = {
-  'STALL_GUARD_FILTER_ENABLED': 0x10000,
-  'STALL_GUARD_TRESHHOLD_VALUE_PATTERN': 0x17F00,
-  'CURRENT_SCALING_PATTERN': 0x1F,
-  'STALL_GUARD_CONFIG_PATTERN': 0x17F00,
-  'STALL_GUARD_VALUE_PATTERN': 0x7F00,
-}
-
-# definitions for the chopper config register
-CHOPPER_CONFIG_REGISTER = {
-  'CHOPPER_MODE_STANDARD': 0X0,
-  'CHOPPER_MODE_T_OFF_FAST_DECAY': 0X4000,
-  'T_OFF_PATTERN': 0Xf,
-  'RANDOM_TOFF_TIME': 0X2000,
-  'BLANK_TIMING_PATTERN': 0X18000,
-  'BLANK_TIMING_SHIFT': 15,
-  'HYSTERESIS_DECREMENT_PATTERN': 0X1800,
-  'HYSTERESIS_DECREMENT_SHIFT': 11,
-  'HYSTERESIS_LOW_VALUE_PATTERN': 0X780,
-  'HYSTERESIS_LOW_SHIFT': 7,
-  'HYSTERESIS_START_VALUE_PATTERN': 0X78,
-  'HYSTERESIS_START_VALUE_SHIFT': 4,
-  'T_OFF_TIMING_PATERN': 0XF
-  }
+def calc_current_scaling(resistor_value, current_ma, vsense_v):
+  """
+  resistor_value: resistor value in milli-ohms
+  vsense_v:  vsense = 0.310V (VSENSE not set) or vsense = 0.165V (VSENSE set)
+  """
+  # This is derived from I=(cs+1)/32*(Vsense/Rsense)
+  # leading to cs = CS = 32*R*I/V (with V = 0,31V oder 0,165V and I = 1000*current)
+  # with Rsense = 0,15
+  # for vsense = 0,310V (VSENSE not set) or vsense = 0,165V (VSENSE set)
+  # Last value below is theoretically - 1.0 for better rounding it is 0.5
+  return ( resistor_value * current_ma * 32.0 / ( vsense_v * 1000.0 * 1000.0 ) ) - 0.5
 
 class TMC26XDriver(StepDirDriver):
 
@@ -112,7 +40,6 @@ class TMC26XDriver(StepDirDriver):
     self._spi = spi
     # store the current and sense resistor value for later use
     self._resistor = resistor
-    self._current_ma = current
     # we are not started yet
     self._started = False
     # by default cool step is not enabled
@@ -175,7 +102,8 @@ class TMC26XDriver(StepDirDriver):
     if self._started:
       # self._spi.write(self.chopper_config_register)
       # We are assuing that Chopper settings have already been set
-      self._spi.write(self._registers[ChopperControllRegister])
+      # self._spi.write(self._registers[ChopperControllRegister])
+      self.flush_registers()
 
   def disable(self):
     """ Disable hardware (possibly temporarily) """
@@ -183,7 +111,8 @@ class TMC26XDriver(StepDirDriver):
     # if not enabled we don't have to do anything since we already delete t_off from the register
     if self._started:
       # self._spi.write(self.chopper_config_register)
-      self._spi.write(self._registers[ChopperControllRegister])
+      # self._spi.write(self._registers[ChopperControllRegister])
+      self.flush_registers()
 
   def set_microsteps(self, microsteps):
     # setting_pattern = 0
@@ -259,8 +188,6 @@ class TMC26XDriver(StepDirDriver):
   def is_enabled(self):
     """ Returns true if hardware is enabled, False otherwise """
     toff = self._registers[ChopperControllRegister].get(ChopperControllRegister.bits.TOFF)
-    # toff = self.chopper_config_register.get(ChopperControllRegister.bits.TOFF)
-    # if self.chopper_config_register & CHOPPER_CONFIG_REGISTER['T_OFF_PATTERN']:
     if toff != 0:
       return True
     else:
@@ -276,23 +203,20 @@ class TMC26XDriver(StepDirDriver):
     self._current_ma = current_ma
     resistor_value = self._resistor
 
-    # This is derived from I=(cs+1)/32*(Vsense/Rsense)
-    # leading to cs = CS = 32*R*I/V (with V = 0,31V oder 0,165V and I = 1000*current)
-    # with Rsense = 0,15
-    # for vsense = 0,310V (VSENSE not set) or vsense = 0,165V (VSENSE set)
-    # Last value below is theoretically - 1.0 for better rounding it is 0.5
-    current_scaling = ( ( resistor_value * current_ma * 32.0 / ( 0.31 * 1000.0 * 1000.0 ) ) - 0.5)
+    current_scaling = int(calc_current_scaling(resistor_value, current_ma, 0.31))
 
     # Set Vsense register
     # check if the current scaling is too low
     if current_scaling < 16:
+      log.debug('current_scaling < 16. Enabling vsense and recaculating')
       # set the csense bit to get a use half the sense voltage (to support lower motor currents)
       self._registers[DriverConfigRegister].set(DriverConfigRegister.bits.VSENSE)
       # and recalculate the current setting
       # Last value below is theoretically - 1.0 for better rounding it is 0.5
-      current_scaling = int(( ( resistor_value * current_ma * 32.0 / ( 0.165 * 1000.0 * 1000.0 ) ) - 0.5) )
+      current_scaling = int( calc_current_scaling(resistor_value, current_ma, 0.165) )
     else:
       # remove vesense flag
+      log.debug('current_scaling >= 16. Disabling vsense')
       self._registers[DriverConfigRegister].unset(DriverConfigRegister.bits.VSENSE)
 
     # do some sanity checks
@@ -302,7 +226,7 @@ class TMC26XDriver(StepDirDriver):
     # set the new current scaling
     self._registers[StallGuard2ControlRegister].set(StallGuard2ControlRegister.bits.CS, current_scaling)
 
-    log.debug('Current scaling is: %s', current_scaling)
+    log.debug('Final current scaling is: %s', current_scaling)
 
     # if started we directly send it to the motor
     if self._started:
@@ -350,7 +274,8 @@ class TMC26XDriver(StepDirDriver):
       .set(ChopperControllRegister.bits.HDEC, hysteresis_decrement)\
     # Send message if we are active
     if self._started:
-      self._spi.write(self._registers[ChopperControllRegister])
+      # self._spi.write(self._registers[ChopperControllRegister])
+      self.flush_registers()
 
   def set_constant_off_time_chopper(self, constant_off_time, blank_time,
                                     fast_decay_time_setting, sine_wave_offset, use_current_comparator, chopper_mode=1):
@@ -406,7 +331,8 @@ class TMC26XDriver(StepDirDriver):
 
     #if started we directly send it to the motor
     if self._started:
-      self._spi.write(self._registers[ChopperControllRegister])
+      # self._spi.write(self._registers[ChopperControllRegister])
+      self.flush_registers()
 
   # TODO Update this unmaintained code
   """
