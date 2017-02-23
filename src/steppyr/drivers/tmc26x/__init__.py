@@ -159,23 +159,6 @@ class TMC26XDriver(StepDirDriver):
   #
 
   def activate(self):
-    # set the current
-    # self.set_current(self._current_ma)
-    # set to a conservative start value
-    # self.set_constant_off_time_chopper(
-    #   constant_off_time=7,
-    #   blank_time=54,
-    #   fast_decay_time_setting=13,
-    #   sine_wave_offset=12,
-    #   use_current_comparator=1)
-    # set a nice microstepping value
-    # self.set_microsteps(self._microsteps)
-    # Send configuration to the driver chip
-    # self._spi.write(self.driver_control_register)
-    # self._spi.write(self.chopper_config_register)
-    # self._spi.write(self.cool_step_register)
-    # self._spi.write(self.stall_guard2_register)
-    # self._spi.write(self.driver_config_register)
     self._started = True
     self.flush_registers()
     super().activate()
@@ -286,64 +269,86 @@ class TMC26XDriver(StepDirDriver):
   def set_current(self, current_ma):
     """
     current_ma: current in milliamps
+
+    Datasheet ch. 8: The low sensitivity (high sense resistor voltage, VSENSE=0) brings best and most robust current
+    regulation, while high sensitivity (low sense resistor voltage; VSENSE=1) reduces power dissipation in the sense resistor.
     """
     self._current_ma = current_ma
-    current_scaling = 0
-
     resistor_value = self._resistor
-    # remove vesense flag
-    # self.driver_configuration_register_value = unset_bit(self.driver_configuration_register_value, DRIVER_CONTROL_REGISTER['VSENSE'])
-    # self.driver_config_register.unset(DriverConfigRegister.bits.VSENSE)
-    self._registers[DriverConfigRegister].unset(DriverConfigRegister.bits.VSENSE)
 
-    # This is derrived from I=(cs+1)/32*(Vsense/Rsense)
-    # leading to cs = CS = 32*R*I/V (with V = 0,31V oder 0,165V  and I = 1000*current)
-    # with Rsense=0,15
-    # for vsense = 0,310V (VSENSE not set)
-    # or vsense = 0,165V (VSENSE set)
-    current_scaling = ( ( resistor_value * current_ma * 32.0 / ( 0.31 * 1000.0 * 1000.0 ) ) - 0.5) # theoretically - 1.0 for better rounding it is 0.5
+    # This is derived from I=(cs+1)/32*(Vsense/Rsense)
+    # leading to cs = CS = 32*R*I/V (with V = 0,31V oder 0,165V and I = 1000*current)
+    # with Rsense = 0,15
+    # for vsense = 0,310V (VSENSE not set) or vsense = 0,165V (VSENSE set)
+    # Last value below is theoretically - 1.0 for better rounding it is 0.5
+    current_scaling = ( ( resistor_value * current_ma * 32.0 / ( 0.31 * 1000.0 * 1000.0 ) ) - 0.5)
+
+    # Set Vsense register
     # check if the current scaling is too low
     if current_scaling < 16:
       # set the csense bit to get a use half the sense voltage (to support lower motor currents)
-      # self.driver_configuration_register_value = set_bit(self.driver_configuration_register_value, DRIVER_CONTROL_REGISTER['VSENSE'])
-      # self.driver_config_register.set(DriverConfigRegister.bits.VSENSE)
       self._registers[DriverConfigRegister].set(DriverConfigRegister.bits.VSENSE)
       # and recalculate the current setting
-      current_scaling = int(( ( resistor_value * current_ma * 32.0 / ( 0.165 * 1000.0 * 1000.0 ) ) - 0.5) )# theoretically - 1.0 for better rounding it is 0.5
+      # Last value below is theoretically - 1.0 for better rounding it is 0.5
+      current_scaling = int(( ( resistor_value * current_ma * 32.0 / ( 0.165 * 1000.0 * 1000.0 ) ) - 0.5) )
+    else:
+      # remove vesense flag
+      self._registers[DriverConfigRegister].unset(DriverConfigRegister.bits.VSENSE)
 
     # do some sanity checks
     if current_scaling > 31:
       current_scaling = 31
 
-    # delete the old value
-    # self.stall_guard2_current_register_value = unset_bit(self.stall_guard2_current_register_value, STALL_GUARD_REGISTER['CURRENT_SCALING_PATTERN'])
     # set the new current scaling
-    # self.stall_guard2_current_register_value = set_bit(self.stall_guard2_current_register_value, current_scaling)
-    # self.stall_guard2_register.set(StallGuard2ControlRegister.bits.CS, current_scaling)
     self._registers[StallGuard2ControlRegister].set(StallGuard2ControlRegister.bits.CS, current_scaling)
+
+    log.debug('Current scaling is: %s', current_scaling)
 
     # if started we directly send it to the motor
     if self._started:
-      # self._spi.write(self.driver_config_register)
-      # self._spi.write(self.stall_guard2_register)
       self._spi.write(self._registers[DriverConfigRegister])
       self._spi.write(self._registers[StallGuard2ControlRegister])
 
   def get_current(self):
     # we calculate the current according to the datasheet to be on the safe side
     # this is not the fastest but the most accurate and illustrative way
-    # result = self.stall_guard2_current_register_value & STALL_GUARD_REGISTER['CURRENT_SCALING_PATTERN']
-    # result = self.stall_guard2_register.get(StallGuard2ControlRegister.bits.CS)
     result = self._registers[StallGuard2ControlRegister].get(StallGuard2ControlRegister.bits.CS)
     resistor_value = self._resistor
-    # vsense_on = self.driver_config_register.get(DriverConfigRegister.bits.VSENSE)
     vsense_on = self._registers[DriverConfigRegister].get(DriverConfigRegister.bits.VSENSE)
-    # voltage = 0.165 if (self.driver_configuration_register_value & DRIVER_CONTROL_REGISTER['VSENSE']) else 0.31
     voltage = 0.165 if vsense_on else 0.31
     result = ( result + 1.0 ) / 32.0 * voltage / resistor_value * 1000.0 * 1000.0
     return result
 
-  def set_constant_off_time_chopper(self, constant_off_time, blank_time, fast_decay_time_setting, sine_wave_offset, use_current_comparator):
+  def set_spreadcycle_chopper(self,
+      off_time, blanking_time, hysteresis_start, hysteresis_end, hysteresis_decrement, chopper_mode=0):
+    """
+    Set chopper mode.
+    :param chopper_mode: 0 spreadCycle mode, 1 Constant off time mode
+    :param off_time: 0 = chopper off, 1 .. 15 = Off time setting
+    :param blanking_time: 16, 24, 36, or 54 system clock cycles
+    :return:
+    """
+    # Sanity check and map values
+    off_time = constrain(off_time, 0, 15)
+    blank_value = lookup_blanking_time_value(blanking_time)
+    hysteresis_start = constrain(hysteresis_start, 0, 7)
+    hysteresis_end = constrain(hysteresis_end, 0, 15)
+    hysteresis_decrement = constrain(hysteresis_decrement, 0, 3)
+    # Set registers
+    # SpreadCycle and Constant Off choppers share registers, so always start with a clean register
+    self._registers[ChopperControllRegister] = ChopperControllRegister()\
+      .set(ChopperControllRegister.bits.CHM, chopper_mode)\
+      .set(ChopperControllRegister.bits.TOFF, off_time)\
+      .set(ChopperControllRegister.bits.TBL, blank_value)\
+      .set(ChopperControllRegister.bits.HSTRT, hysteresis_start)\
+      .set(ChopperControllRegister.bits.HEND, hysteresis_end)\
+      .set(ChopperControllRegister.bits.HDEC, hysteresis_decrement)\
+    # Send message if we are active
+    if self._started:
+      self._spi.write(self._registers[ChopperControllRegister])
+
+  def set_constant_off_time_chopper(self, constant_off_time, blank_time,
+                                    fast_decay_time_setting, sine_wave_offset, use_current_comparator, chopper_mode=1):
     """
     constant_off_time: The off time setting controls the minimum chopper frequency.
     For most applications an off time within  the range of 5μs to 20μs will fit.
@@ -363,86 +368,39 @@ class TMC26XDriver(StepDirDriver):
       1: enable comparator termination of fast decay cycle
       0: end by time only
     """
+    # SpreadCycle and Constant Off choppers share registers, so always start with a clean register
+    self._registers[ChopperControllRegister] = ChopperControllRegister()
+
     # perform some sanity checks
-    # if constant_off_time < 2:
-    #  constant_off_time = 2
-    #elif constant_off_time > 15:
-    #  constant_off_time = 15
     constant_off_time = constrain(constant_off_time, 2, 15)
-    # save the constant off time
-    self.constant_off_time = constant_off_time
-
     # calculate the value acc to the clock cycles
-    if blank_time >= 54:
-      blank_value = 3
-    elif blank_time >= 36:
-      blank_value = 2
-    elif blank_time >= 24:
-      blank_value = 1
-    else:
-      blank_value = 0
-
-    if fast_decay_time_setting < 0:
-      fast_decay_time_setting = 0
-    elif fast_decay_time_setting > 15:
-      fast_decay_time_setting = 15
-
-    if sine_wave_offset < -3:
-      sine_wave_offset = -3
-    elif sine_wave_offset > 12:
-      sine_wave_offset = 12
+    blank_value = lookup_blanking_time_value(blank_time)
+    fast_decay_time_setting = constrain(fast_decay_time_setting, 0, 15)
+    sine_wave_offset = constrain(sine_wave_offset, -3, 12)
     # shift the sine_wave_offset
     sine_wave_offset += 3
 
-    # calculate the register setting
-    # first of all delete all the values for this
-    # self.chopper_config_register = unset_bit(
-    #  self.chopper_config_register,
-    #  ( (1 << 12) | CHOPPER_CONFIG_REGISTER['BLANK_TIMING_PATTERN']
-    #              | CHOPPER_CONFIG_REGISTER['HYSTERESIS_DECREMENT_PATTERN']
-    #              | CHOPPER_CONFIG_REGISTER['HYSTERESIS_LOW_VALUE_PATTERN']
-    #              | CHOPPER_CONFIG_REGISTER['HYSTERESIS_START_VALUE_PATTERN']
-    #              | CHOPPER_CONFIG_REGISTER['T_OFF_TIMING_PATERN'] ) )
-
     # set the constant off pattern
-    # self.chopper_config_register = set_bit(self.chopper_config_register, CHOPPER_CONFIG_REGISTER['CHOPPER_MODE_T_OFF_FAST_DECAY'])
-    # self.chopper_config_register.set(ChopperControllRegister.bits.CHM, 1) # Constant tOFF with fast decay time
-    self._registers[ChopperControllRegister].set(ChopperControllRegister.bits.CHM, 1)  # Constant tOFF with fast decay time
+    # Constant tOFF with fast decay time
+    self._registers[ChopperControllRegister].set(ChopperControllRegister.bits.CHM, chopper_mode)
     # set the blank timing value
-    # self.chopper_config_register = set_bit(self.chopper_config_register, blank_value << CHOPPER_CONFIG_REGISTER['BLANK_TIMING_SHIFT'])
-    # self.chopper_config_register.set(ChopperControllRegister.bits.TB, blank_value)
     self._registers[ChopperControllRegister].set(ChopperControllRegister.bits.TB, blank_value)
-    #setting the constant off time
-    # self.chopper_config_register = set_bit(self.chopper_config_register, constant_off_time)
-    # self.chopper_config_register.set(ChopperControllRegister.bits.TOFF, constant_off_time)
+    # setting the constant off time
     self._registers[ChopperControllRegister].set(ChopperControllRegister.bits.TOFF, constant_off_time)
-    #set the fast decay time
-    #set msb
-    #self.chopper_config_register = set_bit(self.chopper_config_register,
-    #  (fast_decay_time_setting & 0x8) << CHOPPER_CONFIG_REGISTER['HYSTERESIS_DECREMENT_SHIFT'])
-    # self.chopper_config_register.set(ChopperControllRegister.bits.HDEC, fast_decay_time_setting & 0x8)
-    # TODO is this bitmask right?
+    # set the fast decay time
+    # set msb
     self._registers[ChopperControllRegister].set(ChopperControllRegister.bits.HDEC, fast_decay_time_setting & 0x8)
-    #other bits
-    # self.chopper_config_register = set_bit(self.chopper_config_register,
-    #  (fast_decay_time_setting & 0x7) << CHOPPER_CONFIG_REGISTER['HYSTERESIS_START_VALUE_SHIFT'])
-    # self.chopper_config_register.set(ChopperControllRegister.bits.HSTRT, fast_decay_time_setting & 0x7)
-    # TODO is this bitmask right?
+    # other bits
     self._registers[ChopperControllRegister].set(ChopperControllRegister.bits.HSTRT, fast_decay_time_setting & 0x7)
-    #set the sine wave offset
-    # self.chopper_config_register = set_bit(self.chopper_config_register,
-    #   sine_wave_offset << CHOPPER_CONFIG_REGISTER['HYSTERESIS_LOW_SHIFT'])
-    # self.chopper_config_register.set(ChopperControllRegister.bits.HEND, sine_wave_offset)
+    # set the sine wave offset
     self._registers[ChopperControllRegister].set(ChopperControllRegister.bits.HEND, sine_wave_offset)
-    # TODO not sure if this is right
-    #using the current comparator?
+    # using the current comparator?
     if not use_current_comparator:
-      # self.chopper_config_register.set(1<<12)
+      # TODO not sure if this bitmask is right
       self._registers[ChopperControllRegister].set(1<<12)
+
     #if started we directly send it to the motor
     if self._started:
-      # self._spi.write(self.driver_control_register)
-      # self._spi.write(self.chopper_config_register)
       self._spi.write(self._registers[ChopperControllRegister])
 
   # TODO Update this unmaintained code
@@ -716,3 +674,22 @@ class TMC26XDriver(StepDirDriver):
     else:
       return False
   '''
+
+def lookup_blanking_time_value(blank_time):
+  """
+  0 16 system clock cycles
+  1 24 system clock cycles
+  2 36 system clock cycles
+  3 54 system clock cycles
+  :param blank_time:
+  :return:
+  """
+  if blank_time >= 54:
+    blank_value = 3
+  elif blank_time >= 36:
+    blank_value = 2
+  elif blank_time >= 24:
+    blank_value = 1
+  else:
+    blank_value = 0
+  return blank_value
