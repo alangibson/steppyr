@@ -30,45 +30,49 @@ class TMC4361Driver(Driver):
     self.tmc26x = TMC26XDriver(spi=TMC26xCoverSPI(self._spi), dir_pin=0, step_pin=0, current=300, resistor=150)
     # Initialize Registers with defaults
     self._registers = {
-      ReferenceConfRegister: ReferenceConfRegister(),
-      SpiStatusSelectionRegister: SpiStatusSelectionRegister(),
-      SPIOutConfRegister: SPIOutConfRegister(),
-      GeneralConfigurationRegister: GeneralConfigurationRegister()\
+      ReferenceConfRegister: ReferenceConfRegister(0x0),
+      SpiStatusSelectionRegister: SpiStatusSelectionRegister(0x82029805),
+      SPIOutConfRegister: SPIOutConfRegister(0x0),
+      GeneralConfigurationRegister: GeneralConfigurationRegister(0x00006020)\
         .set(GeneralConfigurationRegister.bits.POL_DIR_OUT),
-      RampModeRegister: RampModeRegister(),
+      RampModeRegister: RampModeRegister(0x0),
       ExternalClockFrequencyRegister: ExternalClockFrequencyRegister(clock_frequency),
-      MotorDriverSettingsRegister: MotorDriverSettingsRegister(),
-      VMaxRegister: VMaxRegister(),
-      VBreakRegister: VBreakRegister(),
-      AMaxRegister: AMaxRegister(),
-      DMaxRegister: DMaxRegister(),
-      VStartRegister: VStartRegister(),
-      VStopRegister: VStopRegister(),
-      Bow1Register: Bow1Register(),
-      Bow2Register: Bow2Register(),
-      Bow3Register: Bow3Register(),
-      Bow4Register: Bow4Register(),
-      AStartRegister: AStartRegister(),
-      DFinalRegister: DFinalRegister(),
-      XActualRegister: XActualRegister(),
-      AActualRegister: AActualRegister(),
-      VActualRegister: VActualRegister(),
-      XTargetRegister: XTargetRegister(),
+      MotorDriverSettingsRegister: MotorDriverSettingsRegister(0x00FB0C80),
+      VMaxRegister: VMaxRegister(0x00000000),
+      VBreakRegister: VBreakRegister(0x00000000),
+      AMaxRegister: AMaxRegister(0x00000000),
+      DMaxRegister: DMaxRegister(0x00000000),
+      VStartRegister: VStartRegister(0x00000000),
+      VStopRegister: VStopRegister(0x000000),
+      Bow1Register: Bow1Register(0x000000),
+      Bow2Register: Bow2Register(0x000000),
+      Bow3Register: Bow3Register(0x000000),
+      Bow4Register: Bow4Register(0x000000),
+      AStartRegister: AStartRegister(0x000000),
+      DFinalRegister: DFinalRegister(0x000000),
+      XActualRegister: XActualRegister(0x00000000),
+      AActualRegister: AActualRegister(0x00000000),
+      VActualRegister: VActualRegister(0x00000000),
+      XTargetRegister: XTargetRegister(0x000000),
       StatusFlagRegister: StatusFlagRegister(),
       StatusEventRegister: StatusEventRegister()\
         .set(StatusEventRegister.bits.TARGET_REACHED)
         .set(StatusEventRegister.bits.POS_COMP_REACHED),
-      CurrentScaleValuesRegister: CurrentScaleValuesRegister()
-      #StandbyDelayRegister: StandbyDelayRegister(),
-      #FreewheelDelayRegister: FreewheelDelayRegister(),
-      #VDRVScaleLimitRegister: VDRVScaleLimitRegister(),
-      #UpScaleDelayRegister: UpScaleDelayRegister(),
-      #HoldScaleDelayRegister: HoldScaleDelayRegister(),
-      #DriveScaleDelayRegister: DriveScaleDelayRegister(),
-      #BoostTimeRegister: BoostTimeRegister(),
+      CurrentScaleValuesRegister: CurrentScaleValuesRegister(0xFFFFFFFF)\
+        .set(CurrentScaleValuesRegister.bits.HOLD_SCALE_VAL, 100),
+      CurrentScalingConfRegister: CurrentScalingConfRegister(0x0)\
+        .set(CurrentScalingConfRegister.bits.HOLD_CURRENT_SCALE_EN, 1),
+
+      StandbyDelayRegister: StandbyDelayRegister(0x0),
+      FreewheelDelayRegister: FreewheelDelayRegister(0x0),
+      VDRVScaleLimitRegister: VDRVScaleLimitRegister(0x0),
+      UpScaleDelayRegister: UpScaleDelayRegister(0x0),
+      HoldScaleDelayRegister: HoldScaleDelayRegister(0x0),
+      DriveScaleDelayRegister: DriveScaleDelayRegister(0x0),
+      BoostTimeRegister: BoostTimeRegister(0x0),
       #BetaGammaRegister: BetaGammaRegister(),
       #SpiDacAddressRegister: SpiDacAddressRegister(),
-      #FullStepVelocityRegister: FullStepVelocityRegister(),
+      FullStepVelocityRegister: FullStepVelocityRegister(0x0),
       #MSLUT0Register: MSLUT0Register(),
       #MSLUT1Register: MSLUT1Register(),
       #MSLUT2Register: MSLUT2Register(),
@@ -80,7 +84,7 @@ class TMC4361Driver(Driver):
       #MSLUTSelectRegister: MSLUTSelectRegister(),
       #MicrostepCountRegister: MicrostepCountRegister(),
       #StartSineRegister: StartSineRegister(),
-      #GearRatioRegister: GearRatioRegister()
+      #GearRatioRegister: GearRatioRegister(0x01000000)
     }
 
   def flush_registers(self):
@@ -638,12 +642,13 @@ class TMC4361Driver(Driver):
       .set(SPIOutConfRegister.bits.SPI_OUTPUT_FORMAT, 10)
       .set(SPIOutConfRegister.bits.COVER_DATA_LENGTH, 0)
       .set(SPIOutConfRegister.bits.AUTOREPEAT_COVER_EN)
+      .set(SPIOutConfRegister.bits.SCALE_VAL_TRANSFER_EN, 1)
       .set(SPIOutConfRegister.bits.SPI_OUT_LOW_TIME, 4)
       .set(SPIOutConfRegister.bits.SPI_OUT_HIGH_TIME, 4)
-      .set(SPIOutConfRegister.bits.SPI_OUT_BLOCK_TIME, 8)
-    )
+      .set(SPIOutConfRegister.bits.SPI_OUT_BLOCK_TIME, 8) )
     # Initialize TMC26x
     self.tmc26x.activate()
+    self.tmc26x.set_stepdir_off(1)
 
   def disable_tmc26x(self):
     if self.tmc26x:
