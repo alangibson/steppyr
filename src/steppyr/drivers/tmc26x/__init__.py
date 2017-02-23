@@ -226,6 +226,9 @@ class TMC26XDriver(StepDirDriver):
     # set the new current scaling
     self._registers[StallGuard2ControlRegister].set(StallGuard2ControlRegister.bits.CS, current_scaling)
 
+    if self._started:
+      self._spi.write(self._registers[StallGuard2ControlRegister])
+
     log.debug('Final current scaling is: %s', current_scaling)
 
     # if started we directly send it to the motor
@@ -334,6 +337,13 @@ class TMC26XDriver(StepDirDriver):
       # self._spi.write(self._registers[ChopperControllRegister])
       self.flush_registers()
 
+  def set_stallguard(self, stallguard_threshold, stallguard_filter_enabled=0):
+    stallguard_threshold = constrain(stallguard_threshold, -64, 63)
+    self._registers[StallGuard2ControlRegister].set(StallGuard2ControlRegister.bits.SGT, stallguard_threshold)
+    self._registers[StallGuard2ControlRegister].set(StallGuard2ControlRegister.bits.SFILT, stallguard_filter_enabled)
+    if self._started:
+      self._spi.write(self._registers[StallGuard2ControlRegister])
+
   # TODO Update this unmaintained code
   """
   def set_random_off_time(self, value):
@@ -344,29 +354,6 @@ class TMC26XDriver(StepDirDriver):
     # if started we directly send it to the motor
     if self._started:
       self.send262(self.driver_control_register_value)
-  """
-
-  # TODO Update this unmaintained code
-  """
-  def set_stall_guard_threshold(self, stall_guard_threshold, stall_guard_filter_enabled):
-    if stall_guard_threshold < -64:
-      stall_guard_threshold = -64
-    # We just have 5 bits
-    elif stall_guard_threshold > 63:
-      stall_guard_threshold = 63
-
-    # add trim down to 7 bits
-    stall_guard_threshold &= 0x7f
-    # delete old stall guard settings
-    self.stall_guard2_current_register_value &= ~ STALL_GUARD_REGISTER['STALL_GUARD_CONFIG_PATTERN']
-    if stall_guard_filter_enabled:
-      self.stall_guard2_current_register_value |= STALL_GUARD_REGISTER['STALL_GUARD_FILTER_ENABLED']
-
-    # Set the new stall guard threshold
-    self.stall_guard2_current_register_value |= (( stall_guard_threshold << 8 ) & STALL_GUARD_REGISTER['STALL_GUARD_CONFIG_PATTERN'] )
-    # if started we directly send it to the motor
-    if self._started:
-      self.send262(self.stall_guard2_current_register_value)
   """
 
   # TODO Update this unmaintained code
