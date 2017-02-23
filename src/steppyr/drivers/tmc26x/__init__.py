@@ -167,6 +167,12 @@ class TMC26XDriver(StepDirDriver):
   # Non-API methods
   #
 
+  def set_stepdir_off(self, value=1):
+    # DRVCONF SDOFF 1
+    self._registers[DriverConfigRegister].set(DriverConfigRegister.bits.SDOFF, value)
+    if self._started:
+      self._spi.write(self._registers[DriverConfigRegister])
+
   def send262(self, datagram):
     """
     send register settings to the stepper driver via SPI
@@ -334,8 +340,8 @@ class TMC26XDriver(StepDirDriver):
 
     #if started we directly send it to the motor
     if self._started:
-      # self._spi.write(self._registers[ChopperControllRegister])
-      self.flush_registers()
+      self._spi.write(self._registers[ChopperControllRegister])
+      # self.flush_registers()
 
   def set_stallguard(self, stallguard_threshold, stallguard_filter_enabled=0):
     stallguard_threshold = constrain(stallguard_threshold, -64, 63)
