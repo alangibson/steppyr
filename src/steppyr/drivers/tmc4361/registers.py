@@ -872,7 +872,12 @@ class InputFilterRegister(Register):
 
 class CurrentScaleValuesRegister(Register):
   REGISTER = 0x06
+  DEFAULT = 0xFFFFFFFF
   # TODO finish this class
+  bits = AttributeDict({
+    # RW  Open-loop standby scaling value.
+    'HOLD_SCALE_VAL': Representation(24, 31)
+  })
 
 class StandbyDelayRegister(Register):
   REGISTER = 0x15
