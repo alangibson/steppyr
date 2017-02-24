@@ -129,18 +129,9 @@ class TMC4361Driver(Driver):
     # We need to write our current register values to the TMC4361 since we just
     # wiped them all out on the chip due to reset.
     self.flush_registers()
-    # TODO ? self._spi.writeRegister(registers.TMC4361_SH_RAMP_MODE_REGISTER, RAMP_MODE_POSITIONING_MODE | RAMP_MODE_NO_RAMP)
-    # TODO ? NEEDED so THAT THE SQUIRREL CAN RECOMPUTE EVERYTHING!
-    # self._spi.writeRegister(registers.TMC4361_START_DELAY_REGISTER, 512)
-    # self.set_motor_steps_per_rev(self._steps_per_revolution)
-    # TODO needed?
-    # filter start (unsigned long filter)
-    # 0x20000 = 2 << 16, 0x400000 = 4 << 20
-    # filter = 0x20000 | 0x400000
-    # filter ref
-    # filter |= (2<<8) | 0x4000
-    # self._spi.writeRegister(registers.TMC4361_INPUT_FILTER_REGISTER, filter)
+    # Enable the slave TCM26x
     self.enable_tmc26x()
+    # Reload the current state of the TCM4361
     self.load_registers()
 
   def shutdown(self):
@@ -224,7 +215,7 @@ class TMC4361Driver(Driver):
     if not vmax:
       log.debug('VMax currently %s. Restoring to %s', vmax, self._last_target_speed)
       self._spi.write(self._registers[VMaxRegister].set(VMaxRegister.bits.VMAX, self._last_target_speed))
-    
+
     self._spi.write(self._registers[XTargetRegister].set(XTargetRegister.bits.XTARGET, absolute_steps))
 
   def set_target_acceleration(self, acceleration):

@@ -76,11 +76,11 @@ class StepperWave(Wave):
 
 class SinusoidPlan:
 
-  def __init__(self, waves, controller, sample_rate=0):
+  def __init__(self, waves, controller, sample_hz=0, sample_peaks=False):
     """
     :param waves:
     :param controller:
-    :param sample_rate: in seconds. 1/Hz
+    :param sample_hz: in seconds. 1/Hz
     """
     # An initialized instance of StepController
     self._controller = controller
@@ -98,9 +98,10 @@ class SinusoidPlan:
     # TODO this assumes all amplitudes are the same
     self._diameter_steps = self._waves[0].amplitude * 2
     self._start_time_sec = time.time()
-    self._sample_rate = sample_rate
+    self._sample_hz = sample_hz
     self._last_direction = None
     self._stopped = False
+    self._sample_peaks = sample_peaks
 
   def _y(self):
     # Units of t must match units of f (preferably seconds)
@@ -122,7 +123,11 @@ class SinusoidPlan:
     if y == self._last_y:
       return False
     direction = sign(y - self._last_y)
-    should_move = direction != self._last_direction
+    # See if we should sample only peaks and valleys
+    if self._sample_peaks:
+      should_move = direction != self._last_direction
+    else:
+      should_move = True
     # Remember last y position and direction
     self._last_y = y
     self._last_direction = direction
@@ -135,7 +140,7 @@ class SinusoidPlan:
   async def run_forever(self):
     self._stopped = False
     while not self._stopped:
-      await asyncio.sleep(self._sample_rate)
+      await asyncio.sleep(1 / self._sample_hz if self._sample_hz else 0)
       await self.run()
 
   def stop(self):
