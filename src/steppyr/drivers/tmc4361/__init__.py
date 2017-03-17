@@ -85,6 +85,8 @@ class TMC4361Driver(Driver):
       #MicrostepCountRegister: MicrostepCountRegister(),
       #StartSineRegister: StartSineRegister(),
       #GearRatioRegister: GearRatioRegister(0x01000000)
+      VirtualStopLeftRegister: VirtualStopLeftRegister(),
+      VirtualStopRightRegister: VirtualStopRightRegister()
     }
 
   def flush_registers(self):
@@ -295,9 +297,31 @@ class TMC4361Driver(Driver):
     """
     Implements StepperController.stop() method.
     """
+
+    current_position = self.load_register_value(XActualRegister, XActualRegister.bits.XACTUAL)
+
+    # Enable virtual stops
+    log.debug('Enabling virtual stop switches')
+    self._spi.write(self._registers[ReferenceConfRegister].set(ReferenceConfRegister.bits.VIRTUAL_LEFT_LIMIT_EN, 1))
+    self._spi.write(self._registers[ReferenceConfRegister].set(ReferenceConfRegister.bits.VIRTUAL_RIGHT_LIMIT_EN, 1))
+    self._spi.write(self._registers[ReferenceConfRegister].set(ReferenceConfRegister.bits.VIRT_STOP_MODE, 1))
+    # Trigger virtual stop
+    log.debug('Stopping by triggering virtual stops at current_position %s', current_position)
+    self._spi.write(self._registers[VirtualStopLeftRegister].set(VirtualStopLeftRegister.bits.VIRT_STOP_LEFT, current_position))
+    self._spi.write(self._registers[VirtualStopRightRegister].set(VirtualStopRightRegister.bits.VIRT_STOP_RIGHT, current_position))
+    # Reset virtual stops
+    log.debug('Disabling virtual stop switches')
+    self._spi.write(self._registers[ReferenceConfRegister].set(ReferenceConfRegister.bits.VIRTUAL_LEFT_LIMIT_EN, 0))
+    self._spi.write(self._registers[ReferenceConfRegister].set(ReferenceConfRegister.bits.VIRTUAL_RIGHT_LIMIT_EN, 0))
+    self._spi.write(self._registers[VirtualStopLeftRegister].set(VirtualStopLeftRegister.bits.VIRT_STOP_LEFT, 0))
+    self._spi.write(self._registers[VirtualStopRightRegister].set(VirtualStopRightRegister.bits.VIRT_STOP_RIGHT, 0))
+    # Read events register to reset stopped flag
+    self.get_status_events()
+
     # Docs say to set VMAX=0, but then we would always have to reset speed when we want to move.
     # self._last_target_speed = self._registers[VMaxRegister].get(VMaxRegister.bits.VMAX)
     self._spi.write(self._registers[VMaxRegister].set(VMaxRegister.bits.VMAX, 0))
+    # self._spi.write(self._registers[VActualRegister].set(VActualRegister.bits.VACTUAL, 0))
     # Immediately switching back to original VMAX causes motor to just keep running
     # self._spi.write(self._registers[VMaxRegister].set(VMaxRegister.bits.VMAX, self._last_target_speed))
     # self._spi.write(self._registers[VActualRegister].set(VActualRegister.bits.VACTUAL, 0))
@@ -305,6 +329,12 @@ class TMC4361Driver(Driver):
     # Warning: that means our position attribute is not reliable!
     target_position = self._registers[XTargetRegister].get(XTargetRegister.bits.XTARGET)
     self._spi.write(self._registers[XActualRegister].set(XActualRegister.bits.XACTUAL, target_position))
+    # self._spi.write(self._registers[XTargetRegister].set(XTargetRegister.bits.XTARGET, current_position))
+
+    # Stop ramp immediately
+    # current_speed = self.load_register_value(VActualRegister, VActualRegister.bits.VACTUAL)
+    # log.debug('Setting VStopRegister to current_speed %s', current_speed)
+    # self._spi.write(self._registers[VStopRegister].set(VStopRegister.bits.VSTOP, current_speed))
 
   # TODO const char homeMotorTMC4361
 

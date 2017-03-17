@@ -1098,3 +1098,21 @@ class GearRatioRegister(Register):
 # TODO add these registers
 # 0x6c COVER_LOW POLLING_STATUS
 # 0x6d COVER_HIGH POLLING_REG
+
+class VirtualStopLeftRegister(Register):
+  REGISTER = 0x33
+  DEFAULT = 0x00000000
+  bits = AttributeDict({
+    # RW 0x33 31:0 (Default: 0x00000000)
+    # Virtual left stop position.
+    'VIRT_STOP_LEFT': Representation(0, 31)
+  })
+
+class VirtualStopRightRegister(Register):
+  REGISTER = 0x34
+  DEFAULT = 0x00000000
+  bits = AttributeDict({
+    # RW 0x34 31:0 (Default: 0x00000000)
+    # Virtual left right position.
+    'VIRT_STOP_RIGHT': Representation(0, 31)
+  })
