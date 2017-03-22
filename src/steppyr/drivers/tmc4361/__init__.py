@@ -170,6 +170,7 @@ class TMC4361Driver(Driver):
     Implements Profile.set_microsteps(microsteps) method.
     """
     value = MICROSTEP_RESOLUTION[microsteps]
+    log.debug('Setting microsteps to: %s', microsteps)
     self._spi.write(self._registers[MotorDriverSettingsRegister]
       .set(MotorDriverSettingsRegister.bits.MSTEP_PER_FS, value) # full stepping
     )

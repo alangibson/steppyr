@@ -13,6 +13,8 @@ class Driver:
     self._pin_mode = pin_mode
     # Microstep resolution
     self._microsteps = microsteps
+    # Maximum speed limit
+    self._max_speed = None
 
   def activate(self):
     pass
@@ -47,3 +49,10 @@ class Driver:
     Set the step pulse width in microseconds.
     """
     self._pulse_width_us = pulse_width_us
+
+  def set_max_speed(self, max_speed):
+    self._max_speed = max_speed
+
+  @property
+  def max_speed(self):
+    return self._max_speed
