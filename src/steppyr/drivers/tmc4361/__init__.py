@@ -217,7 +217,7 @@ class TMC4361Driver(Driver):
     if not vmax:
       log.debug('VMax currently %s. Restoring to %s', vmax, self._last_target_speed)
       self._spi.write(self._registers[VMaxRegister].set(VMaxRegister.bits.VMAX, self._last_target_speed))
-
+    log.debug('Setting absolute target steps to %s', absolute_steps)
     self._spi.write(self._registers[XTargetRegister].set(XTargetRegister.bits.XTARGET, absolute_steps))
 
   def set_target_acceleration(self, acceleration):
@@ -350,10 +350,11 @@ class TMC4361Driver(Driver):
   def target_deceleration(self):
     return self.load_register_value(DMaxRegister, DMaxRegister.bits.DMAX)
 
-  def set_ramp_scurve(self, v_max, a_max, d_max, bow1, bow2, bow3, bow4,
-    a_start=0, d_final=0,
-    motion_profile=2, operation_mode=1,
-    v_start=0, v_stop=0):
+  def set_ramp_scurve(self, target_speed, target_acceleration, target_deceleration,
+      bow1, bow2, bow3, bow4,
+      a_start=0, d_final=0,
+      motion_profile=2, operation_mode=1, # fixed values
+      v_start=0, v_stop=0):
     """
     In order to make use of S-shaped ramps, do as follows:
     Action:
@@ -395,7 +396,7 @@ class TMC4361Driver(Driver):
       - BOW4 determines the value which decreases the absolute deceleration value.
       - DMAX determines the maximum absolute deceleration value.
     """
-    self._last_target_speed = v_max
+    self._last_target_speed = target_speed
     self._registers[RampModeRegister]\
       .set(RampModeRegister.bits.MOTION_PROFILE, motion_profile)\
       .set(RampModeRegister.bits.OPERATION_MODE, operation_mode)
@@ -403,18 +404,20 @@ class TMC4361Driver(Driver):
     self._registers[Bow2Register].set(Bow2Register.bits.BOW2, bow2)
     self._registers[Bow3Register].set(Bow3Register.bits.BOW3, bow3)
     self._registers[Bow4Register].set(Bow4Register.bits.BOW4, bow4)
-    self._registers[VMaxRegister].set(VMaxRegister.bits.VMAX, v_max)
-    self._registers[AMaxRegister].set(AMaxRegister.bits.AMAX, a_max)
-    self._registers[DMaxRegister].set(DMaxRegister.bits.DMAX, d_max)
+    self._registers[VMaxRegister].set(VMaxRegister.bits.VMAX, target_speed)
+    self._registers[AMaxRegister].set(AMaxRegister.bits.AMAX, target_acceleration)
+    self._registers[DMaxRegister].set(DMaxRegister.bits.DMAX, target_deceleration)
     self._registers[VStartRegister].set(VStartRegister.bits.VSTART, v_start)
     self._registers[VStopRegister].set(VStopRegister.bits.VSTOP, v_stop)
     self._registers[AStartRegister].set(AStartRegister.bits.ASTART, a_start)
     self._registers[DFinalRegister].set(DFinalRegister.bits.DFINAL, d_final)
     self.flush_registers()
 
-  def set_ramp_none(self, target_speed):
+  def set_ramp_none(self, target_speed=None):
     """
     Motion profile No Ramp follows VMAX only (rectangular velocity shape).
+
+    If you do not provide target_speed parameters, you need to set this later.
 
     In Velocity mode
     Action:
@@ -439,15 +442,19 @@ class TMC4361Driver(Driver):
     self._registers[RampModeRegister]\
       .set(RampModeRegister.bits.MOTION_PROFILE, 0)\
       .set(RampModeRegister.bits.OPERATION_MODE, 1)
-    self._registers[VMaxRegister].set(VMaxRegister.bits.VMAX, target_speed)
+    if target_speed:
+      self._registers[VMaxRegister].set(VMaxRegister.bits.VMAX, target_speed)
     self.flush_registers()
 
-  def set_ramp_trapezoid(self, target_speed, target_acceleration, target_deceleration,
-      motion_profile=1, operation_mode=1, v_break=0,
+  def set_ramp_trapezoid(self, target_speed=None, target_acceleration=None, target_deceleration=None,
+      motion_profile=1, operation_mode=1, v_break=0, # fixed values
       v_start=0, v_stop=0):
     """
     Consideration of acceleration and deceleration values
     without adaptation of these acceleration values.
+
+    If you do not provide target_speed, target_acceleration, target_deceleration
+    parameters, you need to set these later.
 
     Action:
       - Set RAMPMODE(1:0) =b’01 (register 0x20).
@@ -455,7 +462,7 @@ class TMC4361Driver(Driver):
       - Set proper AMAX register 0x28 and DMAX register 0x29.
       - Set proper VMAX register 0x24.
       - (Optional) Set proper VSTART > 0 (register 0x25).
-      - (Optional) Set propert VSTOP > 0 (register 0x26).
+      - (Optional) Set proper VSTOP > 0 (register 0x26).
     Result:
       The internal velocity VACTUAL is changed successively to VMAX with a linear ramp.
       Only AMAX and DMAX define the acceleration/deceleration slopes.
@@ -470,12 +477,15 @@ class TMC4361Driver(Driver):
     self._registers[RampModeRegister]\
       .set(RampModeRegister.bits.MOTION_PROFILE, motion_profile)\
       .set(RampModeRegister.bits.OPERATION_MODE, operation_mode)
-    self._registers[VMaxRegister].set(VMaxRegister.bits.VMAX, target_speed)
-    self._registers[VBreakRegister].set(VBreakRegister.bits.VBREAK, 0)
-    self._registers[AMaxRegister].set(AMaxRegister.bits.AMAX, target_acceleration)
-    self._registers[DMaxRegister].set(DMaxRegister.bits.DMAX, target_deceleration)
+    self._registers[VBreakRegister].set(VBreakRegister.bits.VBREAK, v_break)
     self._registers[VStartRegister].set(VStartRegister.bits.VSTART, v_start)
     self._registers[VStopRegister].set(VStopRegister.bits.VSTOP, v_stop)
+    if target_speed:
+      self._registers[VMaxRegister].set(VMaxRegister.bits.VMAX, target_speed)
+    if target_acceleration:
+      self._registers[AMaxRegister].set(AMaxRegister.bits.AMAX, target_acceleration)
+    if target_deceleration:
+      self._registers[DMaxRegister].set(DMaxRegister.bits.DMAX, target_deceleration)
     self.flush_registers()
 
   def set_ramp_sixpoint(self, v_max, v_break, a_start, a_max, d_max, d_final,
