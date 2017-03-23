@@ -56,3 +56,10 @@ class Driver:
   @property
   def max_speed(self):
     return self._max_speed
+
+  def report(self):
+    """
+    Debug output internal state.
+    :return: None
+    """
+    pass

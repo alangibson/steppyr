@@ -75,7 +75,7 @@ class TestSuite(unittest.TestCase):
     print('INITIAL_MICROSTEPPING')
     print('  ', bin(tmc26x.INITIAL_MICROSTEPPING))
 
-    print('stepper.driver_control_register_value')
+    print('_stepper_motor.driver_control_register_value')
     print('  ', tmc26x.tobin(stepper.activator.driver_control_register_value, 20))
 
     print('MICROSTEP_RESOLUTION')

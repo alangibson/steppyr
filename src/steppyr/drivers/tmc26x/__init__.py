@@ -175,7 +175,7 @@ class TMC26XDriver(StepDirDriver):
 
   def send262(self, datagram):
     """
-    send register settings to the stepper driver via SPI
+    send register settings to the _stepper_motor driver via SPI
     returns the current status
     """
     # Send datagram to driver

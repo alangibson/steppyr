@@ -170,6 +170,7 @@ class TMC4361Driver(Driver):
     Implements Profile.set_microsteps(microsteps) method.
     """
     value = MICROSTEP_RESOLUTION[microsteps]
+    super().set_microsteps(value)
     log.debug('Setting microsteps to: %s', microsteps)
     self._spi.write(self._registers[MotorDriverSettingsRegister]
       .set(MotorDriverSettingsRegister.bits.MSTEP_PER_FS, value) # full stepping
@@ -180,6 +181,7 @@ class TMC4361Driver(Driver):
   @property
   def microsteps(self):
     value = self.load_register_value(MotorDriverSettingsRegister, MotorDriverSettingsRegister.bits.MSTEP_PER_FS)
+    super().set_microsteps(value)
     # TODO add a reverse lookup method to MICROSTEP_RESOLUTION
     # reverse lookup to get microsteps
     return [k for k,v in MICROSTEP_RESOLUTION.items() if v == value][0]

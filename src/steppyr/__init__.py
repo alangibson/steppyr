@@ -135,6 +135,10 @@ class StepperController:
     self._driver.set_microsteps(microsteps)
     self._profile.set_microsteps(microsteps)
 
+  @property
+  def microsteps(self):
+    return self._driver.microsteps
+
   def set_target_speed(self, speed):
     """
     Set our requested ultimate cruising speed.
@@ -196,3 +200,10 @@ class StepperController:
     Set the step pulse width in microseconds.
     """
     self._driver.set_pulse_width(pulse_width_us)
+
+  def report(self):
+    """
+    Debug output internal state.
+    :return: None
+    """
+    pass

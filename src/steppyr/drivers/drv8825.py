@@ -2,7 +2,7 @@ from .a4988 import A4988Driver
 
 class DRV8825Driver(A4988Driver):
   """
-  Driver class for Pololu DRV8825 stepper driver.
+  Driver class for Pololu DRV8825 _stepper_motor driver.
 
   https://www.pololu.com/file/download/drv8825.pdf
   """
